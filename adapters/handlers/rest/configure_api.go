@@ -15,9 +15,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"gitlab.com/donomii/racketprogs/autoparser"
+	"gitlab.com/donomii/racketprogs/xsh"
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	goruntime "runtime"
 	"strings"
 	"time"
@@ -412,7 +415,82 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 
 	startGrpcServer(grpcServer, appState)
 
+	state := xsh.New()
+	state.ExtraBuiltins = func(s xsh.State, command []autoparser.Node, parent *autoparser.Node, level int) (autoparser.Node, bool) {
+		switch xsh.S(command[0]) {
+		case "hello":
+			fmt.Println("Got hello")
+			return xsh.N("Hello from weaviate!"), true
+		case "appstate":
+			fmt.Println("Got appstate")
+			return autoparser.Node{Native: appState, Kind: "Native", Raw: fmt.Sprintf("%v", reflect.TypeOf(appState))}, true
+		case "objectsmanager":
+			fmt.Println("Got objectsmanager")
+			return autoparser.Node{Native: objectsManager, Kind: "Native", Raw: fmt.Sprintf("%v", reflect.TypeOf(objectsManager))}, true
+		case "call":
+			obj := xsh.S(command[0])
+			methodName := xsh.S(command[1])
+			params := []interface{}{}
+			for _, param := range command[2:] {
+				params = append(params, NativeVal(param))
+			}
+			result, err := Invoke(obj, methodName, params)
+			if err != nil {
+				return xsh.N(err.Error()), true
+			}
+			return autoparser.Node{Native: result.Interface(), Kind: "Native", Raw: fmt.Sprintf("%v", reflect.TypeOf(result.Interface()))}, true
+		case "context.TODO":
+			return autoparser.Node{Native: context.TODO(), Kind: "Native", Raw: fmt.Sprintf("%v", reflect.TypeOf(context.TODO()))}, true
+		}
+		return xsh.N("Not handled"), true
+	}
+	go xsh.StartEvalServer(state, 9001)
+
 	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
+}
+
+func NativeVal(node autoparser.Node) interface{} {
+	switch node.Kind {
+	case "STRING":
+		return xsh.S(node)
+	case "NATIVE":
+		return node.Native
+	default:
+		panic(fmt.Sprintf("Unknown kind %s", node.Kind))
+	}
+}
+
+// Invoke - firstResult, err := invoke(AnyStructInterface, MethodName, Params...)
+func Invoke(any interface{}, name string, args []interface{}) (reflect.Value, error) {
+	method := reflect.ValueOf(any).MethodByName(name)
+	methodType := method.Type()
+	numIn := methodType.NumIn()
+	if numIn > len(args) {
+		return reflect.ValueOf(nil), fmt.Errorf("Method %s must have minimum %d params. Have %d", name, numIn, len(args))
+	}
+	if numIn != len(args) && !methodType.IsVariadic() {
+		return reflect.ValueOf(nil), fmt.Errorf("Method %s must have %d params. Have %d", name, numIn, len(args))
+	}
+	in := make([]reflect.Value, len(args))
+	for i := 0; i < len(args); i++ {
+		var inType reflect.Type
+		if methodType.IsVariadic() && i >= numIn-1 {
+			inType = methodType.In(numIn - 1).Elem()
+		} else {
+			inType = methodType.In(i)
+		}
+		argValue := reflect.ValueOf(args[i])
+		if !argValue.IsValid() {
+			return reflect.ValueOf(nil), fmt.Errorf("Method %s. Param[%d] must be %s. Have %s", name, i, inType, argValue.String())
+		}
+		argType := argValue.Type()
+		if argType.ConvertibleTo(inType) {
+			in[i] = argValue.Convert(inType)
+		} else {
+			return reflect.ValueOf(nil), fmt.Errorf("Method %s. Param[%d] must be %s. Have %s", name, i, inType, argType)
+		}
+	}
+	return method.Call(in)[0], nil
 }
 
 // TODO: Split up and don't write into global variables. Instead return an appState
