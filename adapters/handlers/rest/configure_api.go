@@ -416,7 +416,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 	startGrpcServer(grpcServer, appState)
 
 	state := xsh.New()
-	state.ExtraBuiltins = func(s xsh.State, command []autoparser.Node, parent *autoparser.Node, level int) (autoparser.Node, bool) {
+	state.ExtraBuiltins = func(s xsh.State, command []autoparser.Node, parent *autoparser.Node, level, timeout int) (autoparser.Node, bool) {
 		switch xsh.S(command[0]) {
 		case "hello":
 			fmt.Println("Got hello")
@@ -428,10 +428,10 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 			fmt.Println("Got objectsmanager")
 			return autoparser.Node{Native: objectsManager, Kind: "Native", Raw: fmt.Sprintf("%v", reflect.TypeOf(objectsManager))}, true
 		case "call":
-			obj := xsh.S(command[0])
-			methodName := xsh.S(command[1])
+			obj := command[1].Native
+			methodName := xsh.S(command[2])
 			params := []interface{}{}
-			for _, param := range command[2:] {
+			for _, param := range command[3:] {
 				params = append(params, NativeVal(param))
 			}
 			result, err := Invoke(obj, methodName, params)
@@ -442,7 +442,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		case "context.TODO":
 			return autoparser.Node{Native: context.TODO(), Kind: "Native", Raw: fmt.Sprintf("%v", reflect.TypeOf(context.TODO()))}, true
 		}
-		return xsh.N("Not handled"), true
+		return xsh.N("Not handled"), false
 	}
 	go xsh.StartEvalServer(state, 9001)
 
@@ -456,12 +456,13 @@ func NativeVal(node autoparser.Node) interface{} {
 	case "NATIVE":
 		return node.Native
 	default:
-		panic(fmt.Sprintf("Unknown kind %s", node.Kind))
+		panic(fmt.Sprintf("Unknown kind %s - %s", node.Kind, xsh.S(node)))
 	}
 }
 
 // Invoke - firstResult, err := invoke(AnyStructInterface, MethodName, Params...)
 func Invoke(any interface{}, name string, args []interface{}) (reflect.Value, error) {
+	fmt.Printf("Fetching method %s\n", name)
 	method := reflect.ValueOf(any).MethodByName(name)
 	methodType := method.Type()
 	numIn := methodType.NumIn()
