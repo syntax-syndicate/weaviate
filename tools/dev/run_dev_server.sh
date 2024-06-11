@@ -49,6 +49,8 @@ case $CONFIG in
       CLUSTER_GOSSIP_BIND_PORT="7100" \
       CLUSTER_DATA_BIND_PORT="7101" \
       RAFT_BOOTSTRAP_EXPECT=1 \
+      PERSISTENCE_MEMTABLES_FLUSH_DIRTY_AFTER_SECONDS=20 \
+      QUERY_MAXIMUM_RESULTS=100000 \
       go_run ./cmd/weaviate-server \
         --scheme http \
         --host "127.0.0.1" \
