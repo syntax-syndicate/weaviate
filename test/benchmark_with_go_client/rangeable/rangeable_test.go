@@ -47,40 +47,58 @@ func TestRangeable(t *testing.T) {
 		Vectorizer: "none",
 		Properties: []*models.Property{
 			{
-				Name:            "int_filterable",
-				DataType:        schema.DataTypeInt.PropString(),
-				IndexFilterable: &vTrue,
-				IndexRangeable:  &vFalse,
+				Name:              "int_filterable",
+				DataType:          schema.DataTypeInt.PropString(),
+				IndexFilterable:   &vTrue,
+				IndexRangeFilters: &vFalse,
 			},
 			{
-				Name:            "int_rangeable",
-				DataType:        schema.DataTypeInt.PropString(),
-				IndexFilterable: &vFalse,
-				IndexRangeable:  &vTrue,
+				Name:              "int_rangeable",
+				DataType:          schema.DataTypeInt.PropString(),
+				IndexFilterable:   &vFalse,
+				IndexRangeFilters: &vTrue,
 			},
 			{
-				Name:            "number_filterable",
-				DataType:        schema.DataTypeNumber.PropString(),
-				IndexFilterable: &vTrue,
-				IndexRangeable:  &vFalse,
+				Name:              "int_migrate",
+				DataType:          schema.DataTypeInt.PropString(),
+				IndexFilterable:   &vTrue,
+				IndexRangeFilters: &vFalse,
 			},
 			{
-				Name:            "number_rangeable",
-				DataType:        schema.DataTypeNumber.PropString(),
-				IndexFilterable: &vFalse,
-				IndexRangeable:  &vTrue,
+				Name:              "number_filterable",
+				DataType:          schema.DataTypeNumber.PropString(),
+				IndexFilterable:   &vTrue,
+				IndexRangeFilters: &vFalse,
 			},
 			{
-				Name:            "date_filterable",
-				DataType:        schema.DataTypeDate.PropString(),
-				IndexFilterable: &vTrue,
-				IndexRangeable:  &vFalse,
+				Name:              "number_rangeable",
+				DataType:          schema.DataTypeNumber.PropString(),
+				IndexFilterable:   &vFalse,
+				IndexRangeFilters: &vTrue,
 			},
 			{
-				Name:            "date_rangeable",
-				DataType:        schema.DataTypeDate.PropString(),
-				IndexFilterable: &vFalse,
-				IndexRangeable:  &vTrue,
+				Name:              "number_migrate",
+				DataType:          schema.DataTypeNumber.PropString(),
+				IndexFilterable:   &vTrue,
+				IndexRangeFilters: &vFalse,
+			},
+			{
+				Name:              "date_filterable",
+				DataType:          schema.DataTypeDate.PropString(),
+				IndexFilterable:   &vTrue,
+				IndexRangeFilters: &vFalse,
+			},
+			{
+				Name:              "date_rangeable",
+				DataType:          schema.DataTypeDate.PropString(),
+				IndexFilterable:   &vFalse,
+				IndexRangeFilters: &vTrue,
+			},
+			{
+				Name:              "date_migrate",
+				DataType:          schema.DataTypeDate.PropString(),
+				IndexFilterable:   &vTrue,
+				IndexRangeFilters: &vFalse,
 			},
 		},
 	}
@@ -133,13 +151,18 @@ func TestRangeable(t *testing.T) {
 				Properties: map[string]interface{}{
 					"int_filterable":    randInt,
 					"int_rangeable":     randInt,
+					"int_migrate":       randInt,
 					"number_filterable": randNumber,
 					"number_rangeable":  randNumber,
+					"number_migrate":    randNumber,
 					"date_filterable":   randDate,
 					"date_rangeable":    randDate,
+					"date_migrate":      randDate,
 				},
 			})
 		}
+
+		fmt.Printf("adding batch %d\n", batch)
 
 		responses, err := client.Batch().ObjectsBatcher().
 			WithObjects(objects...).
@@ -327,9 +350,12 @@ func TestRangeable(t *testing.T) {
 		queryDates(resultDates, i, randDate)
 	}
 
-	fmt.Printf("ints\n%+v\n\n", resultInts)
-	fmt.Printf("numbers\n%+v\n\n", resultNumbers)
-	fmt.Printf("dates\n%+v\n\n", resultDates)
+	fmt.Printf("ints\nfilterable: %s\nrangeable: %s\n%+v\n\n",
+		resultInts.totalFilterable.String(), resultInts.totalRangeable.String(), resultInts)
+	fmt.Printf("numbers\nfilterable: %s\nrangeable: %s\n%+v\n\n",
+		resultNumbers.totalFilterable.String(), resultNumbers.totalRangeable.String(), resultNumbers)
+	fmt.Printf("dates\nfilterable: %s\nrangeable: %s\n%+v\n\n",
+		resultDates.totalFilterable.String(), resultDates.totalRangeable.String(), resultDates)
 
 	// compaction
 	time.Sleep(50 * time.Second)
@@ -363,7 +389,10 @@ func TestRangeable(t *testing.T) {
 		queryDates(resultDatesComp, i, randDate)
 	}
 
-	fmt.Printf("ints comp\n%+v\n\n", resultIntsComp)
-	fmt.Printf("numbers comp\n%+v\n\n", resultNumbersComp)
-	fmt.Printf("dates comp\n%+v\n\n", resultDatesComp)
+	fmt.Printf("ints compacted\nfilterable: %s\nrangeable: %s\n%+v\n\n",
+		resultIntsComp.totalFilterable.String(), resultIntsComp.totalRangeable.String(), resultIntsComp)
+	fmt.Printf("numbers compacted\nfilterable: %s\nrangeable: %s\n%+v\n\n",
+		resultNumbersComp.totalFilterable.String(), resultNumbersComp.totalRangeable.String(), resultNumbersComp)
+	fmt.Printf("dates compacted\nfilterable: %s\nrangeable: %s\n%+v\n\n",
+		resultDatesComp.totalFilterable.String(), resultDatesComp.totalRangeable.String(), resultDatesComp)
 }
