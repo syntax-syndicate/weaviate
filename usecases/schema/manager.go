@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/cluster/proto/api"
@@ -398,7 +399,8 @@ func (m *Manager) activateTenantIfInactive(class string,
 	status map[string]string,
 ) (map[string]string, error) {
 	req := &api.UpdateTenantsRequest{
-		Tenants: make([]*api.Tenant, 0, len(status)),
+		Tenants:      make([]*api.Tenant, 0, len(status)),
+		ClusterNodes: m.clusterState.Candidates(),
 	}
 
 	for tenant, s := range status {
@@ -421,6 +423,31 @@ func (m *Manager) activateTenantIfInactive(class string,
 		}
 
 		return nil, fmt.Errorf("implicit activation of tenants %s: %w", strings.Join(names, ", "), err)
+	}
+
+	// i believe this ensures tenants exist in the schema, but not that their relevant data has been downloaded?
+	// m.schemaReader.WaitForUpdate(context.TODO(), v)
+
+	tenantNames := make([]string, len(req.Tenants))
+	for i, tenant := range req.Tenants {
+		tenantNames[i] = tenant.Name
+	}
+	// wait up to 5s for this tenant status to be HOT
+	for i := 0; i < 5; i++ {
+		tenantIsHot := false
+
+		tenants, _, _ := m.schemaManager.QueryTenants(class, tenantNames)
+		for _, t := range tenants {
+			fmt.Println("NATEE qt", t.Name, t.ActivityStatus)
+			if t.ActivityStatus == "HOT" {
+				tenantIsHot = true
+				continue
+			}
+		}
+		if tenantIsHot {
+			continue
+		}
+		time.Sleep(time.Second)
 	}
 
 	for _, t := range req.Tenants {
