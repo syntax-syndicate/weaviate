@@ -14,6 +14,7 @@ package replica
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/stretchr/testify/mock"
@@ -31,7 +32,7 @@ type fakeRClient struct {
 
 func (f *fakeRClient) FetchObject(ctx context.Context, host, index, shard string,
 	id strfmt.UUID, props search.SelectProperties,
-	additional additional.Properties,
+	additional additional.Properties, timeout time.Duration,
 ) (objects.Replica, error) {
 	args := f.Called(ctx, host, index, shard, id, props, additional)
 	return args.Get(0).(objects.Replica), args.Error(1)
@@ -52,7 +53,7 @@ func (f *fakeRClient) OverwriteObjects(ctx context.Context, host, index, shard s
 }
 
 func (f *fakeRClient) DigestObjects(ctx context.Context, host, index, shard string,
-	ids []strfmt.UUID,
+	ids []strfmt.UUID, timeout time.Duration,
 ) ([]RepairResponse, error) {
 	args := f.Called(ctx, host, index, shard, ids)
 	return args.Get(0).([]RepairResponse), args.Error(1)

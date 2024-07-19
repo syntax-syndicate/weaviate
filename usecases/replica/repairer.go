@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/weaviate/weaviate/entities/models"
 
@@ -74,7 +75,7 @@ func (r *repairer) repairOne(ctx context.Context,
 	winner := votes[winnerIdx]
 	if updates.UpdateTime() != lastUTime {
 		updates, err = cl.FullRead(ctx, winner.sender, r.class, shard, id,
-			search.SelectProperties{}, additional.Properties{})
+			search.SelectProperties{}, additional.Properties{}, 5*time.Second)
 		if err != nil {
 			return nil, fmt.Errorf("get most recent object from %s: %w", winner.sender, err)
 		}
@@ -105,6 +106,7 @@ func (r *repairer) repairOne(ctx context.Context,
 				StaleUpdateTime: vote.UTime,
 			}}
 			resp, err := cl.Overwrite(ctx, vote.sender, r.class, shard, ups)
+			fmt.Println("NATEE overwrite", resp, err, time.Now())
 			if err != nil {
 				return fmt.Errorf("node %q could not repair object: %w", vote.sender, err)
 			}
@@ -149,7 +151,7 @@ func (r *repairer) repairExist(ctx context.Context,
 	}
 	// fetch most recent object
 	winner := votes[winnerIdx]
-	resp, err := cl.FullRead(ctx, winner.sender, r.class, shard, id, search.SelectProperties{}, additional.Properties{})
+	resp, err := cl.FullRead(ctx, winner.sender, r.class, shard, id, search.SelectProperties{}, additional.Properties{}, 3*time.Second)
 	if err != nil {
 		return false, fmt.Errorf("get most recent object from %s: %w", winner.sender, err)
 	}

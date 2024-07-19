@@ -14,6 +14,7 @@ package replica
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/weaviate/weaviate/entities/additional"
@@ -200,7 +201,7 @@ type rClient interface {
 	// FetchObject fetches one object
 	FetchObject(_ context.Context, host, index, shard string,
 		id strfmt.UUID, props search.SelectProperties,
-		additional additional.Properties) (objects.Replica, error)
+		additional additional.Properties, timeout time.Duration) (objects.Replica, error)
 
 	// FetchObjects fetches objects specified in ids list.
 	FetchObjects(_ context.Context, host, index, shard string,
@@ -215,7 +216,7 @@ type rClient interface {
 	// number of bytes transferred over the network when fetching a replicated
 	// object
 	DigestObjects(ctx context.Context, host, index, shard string,
-		ids []strfmt.UUID) ([]RepairResponse, error)
+		ids []strfmt.UUID, timeout time.Duration) ([]RepairResponse, error)
 
 	FindUUIDs(ctx context.Context, host, index, shard string,
 		filters *filters.LocalFilter) ([]strfmt.UUID, error)
@@ -238,8 +239,9 @@ func (fc finderClient) FullRead(ctx context.Context,
 	id strfmt.UUID,
 	props search.SelectProperties,
 	additional additional.Properties,
+	timeout time.Duration,
 ) (objects.Replica, error) {
-	return fc.cl.FetchObject(ctx, host, index, shard, id, props, additional)
+	return fc.cl.FetchObject(ctx, host, index, shard, id, props, additional, timeout)
 }
 
 func (fc finderClient) HashTreeLevel(ctx context.Context,
@@ -252,9 +254,10 @@ func (fc finderClient) HashTreeLevel(ctx context.Context,
 func (fc finderClient) DigestReads(ctx context.Context,
 	host, index, shard string,
 	ids []strfmt.UUID,
+	timeout time.Duration,
 ) ([]RepairResponse, error) {
 	n := len(ids)
-	rs, err := fc.cl.DigestObjects(ctx, host, index, shard, ids)
+	rs, err := fc.cl.DigestObjects(ctx, host, index, shard, ids, timeout)
 	if err == nil && len(rs) != n {
 		err = fmt.Errorf("malformed digest read response: length expected %d got %d", n, len(rs))
 	}

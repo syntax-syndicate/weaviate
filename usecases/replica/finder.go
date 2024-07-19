@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	enterrors "github.com/weaviate/weaviate/entities/errors"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -87,12 +88,12 @@ func (f *Finder) GetOne(ctx context.Context,
 	adds additional.Properties,
 ) (*storobj.Object, error) {
 	c := newReadCoordinator[findOneReply](f, shard)
-	op := func(ctx context.Context, host string, fullRead bool) (findOneReply, error) {
+	op := func(ctx context.Context, host string, fullRead bool, timeout time.Duration) (findOneReply, error) {
 		if fullRead {
-			r, err := f.client.FullRead(ctx, host, f.class, shard, id, props, adds)
+			r, err := f.client.FullRead(ctx, host, f.class, shard, id, props, adds, timeout)
 			return findOneReply{host, 0, r, r.UpdateTime(), false}, err
 		} else {
-			xs, err := f.client.DigestReads(ctx, host, f.class, shard, []strfmt.UUID{id})
+			xs, err := f.client.DigestReads(ctx, host, f.class, shard, []strfmt.UUID{id}, timeout)
 			var x RepairResponse
 			if len(xs) == 1 {
 				x = xs[0]
@@ -118,7 +119,7 @@ func (f *Finder) FindUUIDs(ctx context.Context,
 ) (uuids []strfmt.UUID, err error) {
 	c := newReadCoordinator[[]strfmt.UUID](f, shard)
 
-	op := func(ctx context.Context, host string, _ bool) ([]strfmt.UUID, error) {
+	op := func(ctx context.Context, host string, _ bool, _ time.Duration) ([]strfmt.UUID, error) {
 		return f.client.FindUUIDs(ctx, host, f.class, shard, filters)
 	}
 
@@ -201,8 +202,8 @@ func (f *Finder) Exists(ctx context.Context,
 	id strfmt.UUID,
 ) (bool, error) {
 	c := newReadCoordinator[existReply](f, shard)
-	op := func(ctx context.Context, host string, _ bool) (existReply, error) {
-		xs, err := f.client.DigestReads(ctx, host, f.class, shard, []strfmt.UUID{id})
+	op := func(ctx context.Context, host string, _ bool, timeout time.Duration) (existReply, error) {
+		xs, err := f.client.DigestReads(ctx, host, f.class, shard, []strfmt.UUID{id}, timeout)
 		var x RepairResponse
 		if len(xs) == 1 {
 			x = xs[0]
@@ -233,7 +234,7 @@ func (f *Finder) NodeObject(ctx context.Context,
 	if !ok || host == "" {
 		return nil, fmt.Errorf("cannot resolve node name: %s", nodeName)
 	}
-	r, err := f.client.FullRead(ctx, host, f.class, shard, id, props, adds)
+	r, err := f.client.FullRead(ctx, host, f.class, shard, id, props, adds, 20*time.Second)
 	return r.Object, err
 }
 
@@ -248,11 +249,11 @@ func (f *Finder) checkShardConsistency(ctx context.Context,
 		shard     = batch.Shard
 		data, ids = batch.Extract() // extract from current content
 	)
-	op := func(ctx context.Context, host string, fullRead bool) (batchReply, error) {
+	op := func(ctx context.Context, host string, fullRead bool, timeout time.Duration) (batchReply, error) {
 		if fullRead { // we already have the content
 			return batchReply{Sender: host, IsDigest: false, FullData: data}, nil
 		} else {
-			xs, err := f.client.DigestReads(ctx, host, f.class, shard, ids)
+			xs, err := f.client.DigestReads(ctx, host, f.class, shard, ids, timeout)
 			return batchReply{Sender: host, IsDigest: true, DigestData: xs}, err
 		}
 	}
@@ -280,7 +281,7 @@ func (f *Finder) CollectShardDifferences(ctx context.Context,
 		return nil, nil, fmt.Errorf("getting host %s", f.resolver.NodeName)
 	}
 
-	op := func(ctx context.Context, host string, fullRead bool) (*ShardDifferenceReader, error) {
+	op := func(ctx context.Context, host string, fullRead bool, _ time.Duration) (*ShardDifferenceReader, error) {
 		if host == sourceHost {
 			return nil, hashtree.ErrNoMoreRanges
 		}

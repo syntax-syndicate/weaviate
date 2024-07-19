@@ -442,7 +442,7 @@ func TestReplicationFetchObject(t *testing.T) {
 
 	c := newReplicationClient(server.Client())
 	resp, err := c.FetchObject(context.Background(), server.URL[7:],
-		"C1", "S1", expected.ID, nil, additional.Properties{})
+		"C1", "S1", expected.ID, nil, additional.Properties{}, 10*time.Second)
 	require.Nil(t, err)
 	assert.Equal(t, expected.ID, resp.ID)
 	assert.Equal(t, expected.Deleted, resp.Deleted)
@@ -525,7 +525,9 @@ func TestReplicationDigestObjects(t *testing.T) {
 	resp, err := c.DigestObjects(context.Background(), server.URL[7:], "C1", "S1", []strfmt.UUID{
 		strfmt.UUID(expected[0].ID),
 		strfmt.UUID(expected[1].ID),
-	})
+	},
+		10*time.Second,
+	)
 	require.Nil(t, err)
 	require.Len(t, resp, 2)
 	assert.Equal(t, expected[0].ID, resp[0].ID)

@@ -49,19 +49,20 @@ func NewReplicationClient(httpClient *http.Client) replica.Client {
 // FetchObject fetches one object it exits
 func (c *replicationClient) FetchObject(ctx context.Context, host, index,
 	shard string, id strfmt.UUID, selectProps search.SelectProperties,
-	additional additional.Properties,
+	additional additional.Properties, timeout time.Duration,
 ) (objects.Replica, error) {
 	resp := objects.Replica{}
 	req, err := newHttpReplicaRequest(ctx, http.MethodGet, host, index, shard, "", id.String(), nil, 0)
 	if err != nil {
 		return resp, fmt.Errorf("create http request: %w", err)
 	}
-	err = c.doCustomUnmarshal(c.timeoutUnit*10, req, nil, resp.UnmarshalBinary)
+	err = c.doCustomUnmarshal(timeout, req, nil, resp.UnmarshalBinary)
 	return resp, err
 }
 
 func (c *replicationClient) DigestObjects(ctx context.Context,
 	host, index, shard string, ids []strfmt.UUID,
+	timeout time.Duration,
 ) (result []replica.RepairResponse, err error) {
 	var resp []replica.RepairResponse
 	body, err := json.Marshal(ids)
@@ -74,7 +75,7 @@ func (c *replicationClient) DigestObjects(ctx context.Context,
 	if err != nil {
 		return resp, fmt.Errorf("create http request: %w", err)
 	}
-	err = c.do(c.timeoutUnit*10, req, body, &resp)
+	err = c.do(timeout, req, body, &resp)
 	return resp, err
 }
 
