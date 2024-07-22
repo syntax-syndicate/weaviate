@@ -100,6 +100,10 @@ func (f *fakeCache) Preload(id uint64, vec []float32) {
 	panic("not implemented")
 }
 
+func (f *fakeCache) NoLockPreload(id uint64, vec []float32) {
+	panic("not implemented")
+}
+
 func (f *fakeCache) Prefetch(id uint64) {
 	panic("not implemented")
 }

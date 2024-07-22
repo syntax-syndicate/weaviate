@@ -694,7 +694,7 @@ func (index *flat) PostStartup() {
 	index.bqCache.Grow(maxID)
 
 	for _, vec := range vecs {
-		index.bqCache.Preload(vec.id, vec.vec)
+		index.bqCache.NoLockPreload(vec.id, vec.vec)
 	}
 }
 

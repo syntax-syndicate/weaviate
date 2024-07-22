@@ -227,6 +227,11 @@ func (s *shardedLockCache[T]) Preload(id uint64, vec []T) {
 	s.cache[id] = vec
 }
 
+func (s *shardedLockCache[T]) NoLockPreload(id uint64, vec []T) {
+	atomic.AddInt64(&s.count, 1)
+	s.cache[id] = vec
+}
+
 func (s *shardedLockCache[T]) Grow(node uint64) {
 	s.maintenanceLock.RLock()
 	if node < uint64(len(s.cache)) {
