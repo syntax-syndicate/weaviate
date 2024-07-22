@@ -111,7 +111,7 @@ func NewMemory(contents []byte) ContentReader {
 
 func NewPread(contentFile *os.File, size uint64) ContentReader {
 	pageSize := syscall.Getpagesize()
-	l, _ := lru.New[int, []byte](128)
+	l, _ := lru.New[int, []byte](1_000_000_000)
 
 	return Pread{contentFile: contentFile, size: size, startOffset: 0, endOffset: size, cache: l, pageSize: pageSize}
 }
