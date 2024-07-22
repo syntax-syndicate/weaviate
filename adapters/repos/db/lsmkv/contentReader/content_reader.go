@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"syscall"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 
@@ -110,8 +109,9 @@ func NewMemory(contents []byte) ContentReader {
 }
 
 func NewPread(contentFile *os.File, size uint64) ContentReader {
-	pageSize := syscall.Getpagesize()
-	l, _ := lru.New[int, []byte](1_000_000_000)
+	// pageSize := syscall.Getpagesize()
+	pageSize := 16 * 1024 * 1024
+	l, _ := lru.New[int, []byte](128)
 
 	return Pread{contentFile: contentFile, size: size, startOffset: 0, endOffset: size, cache: l, pageSize: pageSize}
 }
