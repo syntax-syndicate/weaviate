@@ -56,6 +56,7 @@ require (
 	github.com/edsrzf/mmap-go v1.1.0
 	github.com/getsentry/sentry-go v0.28.1
 	github.com/go-ego/gse v0.80.2
+	github.com/google/pprof v0.0.0-20240722153945-304e4f0156b8
 	github.com/googleapis/gax-go/v2 v2.12.4
 	github.com/hashicorp/go-hclog v1.6.2
 	github.com/hashicorp/raft v1.5.0

@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/weaviate/weaviate/usecases/fgprof"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -1174,7 +1175,7 @@ func setupGoProfiling(config config.Config, logger logrus.FieldLogger) {
 	if config.Profiling.Disabled {
 		return
 	}
-
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
 	enterrors.GoWrapper(func() {
 		portNumber := config.Profiling.Port
 		if portNumber == 0 {
