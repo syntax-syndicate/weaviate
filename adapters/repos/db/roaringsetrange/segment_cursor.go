@@ -53,3 +53,50 @@ func (c *SegmentCursor) Next() (uint8, roaringset.BitmapLayer, bool) {
 		Deletions: sn.Deletions(),
 	}, true
 }
+
+type GaplessSegmentCursor struct {
+	cursor *SegmentCursor
+
+	started bool
+	key     uint8
+	lastKey uint8
+	lastVal roaringset.BitmapLayer
+	lastOk  bool
+}
+
+func NewGaplessSegmentCursor(cursor *SegmentCursor) *GaplessSegmentCursor {
+	return &GaplessSegmentCursor{cursor: cursor, started: false, key: 0}
+}
+
+func (c *GaplessSegmentCursor) First() (uint8, roaringset.BitmapLayer, bool) {
+	c.started = true
+
+	c.lastKey, c.lastVal, c.lastOk = c.cursor.First()
+
+	c.key = 1
+	if c.lastOk && c.lastKey == 0 {
+		return c.lastKey, c.lastVal, c.lastOk
+	}
+	return 0, roaringset.BitmapLayer{}, true
+}
+
+func (c *GaplessSegmentCursor) Next() (uint8, roaringset.BitmapLayer, bool) {
+	if !c.started {
+		return c.First()
+	}
+
+	if c.key >= 65 {
+		return 0, roaringset.BitmapLayer{}, false
+	}
+
+	for c.lastOk && c.lastKey < c.key {
+		c.lastKey, c.lastVal, c.lastOk = c.cursor.Next()
+	}
+
+	currKey := c.key
+	c.key++
+	if c.lastOk && c.lastKey == currKey {
+		return currKey, c.lastVal, true
+	}
+	return currKey, roaringset.BitmapLayer{}, true
+}
