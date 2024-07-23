@@ -15,9 +15,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/weaviate/sroar"
 	"github.com/weaviate/weaviate/adapters/repos/db/lsmkv"
+	"github.com/weaviate/weaviate/adapters/repos/db/roaringset"
 	"github.com/weaviate/weaviate/entities/filters"
 )
 
@@ -30,6 +32,11 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 	if pv.operator == filters.OperatorWithinGeoRange {
 		return s.docBitmapGeo(ctx, pv)
 	}
+
+	start := time.Now()
+	defer func() {
+		fmt.Printf("  ==> strategy [%s] took [%s]\n\n", b.Strategy(), time.Since(start))
+	}()
 	// all other operators perform operations on the inverted index which we
 	// can serve directly
 	switch b.Strategy() {
@@ -38,7 +45,16 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 	case lsmkv.StrategyRoaringSet:
 		return s.docBitmapInvertedRoaringSet(ctx, b, limit, pv)
 	case lsmkv.StrategyRoaringSetRange:
-		return s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
+		dbm, err := s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
+		if err == nil {
+			bm := roaringset.NewBitmap()
+			bm.Or(dbm.docIDs)
+
+			fmt.Printf("  ==> search op [%s] card [%d] size [%d]\n",
+				pv.operator.Name(), dbm.docIDs.GetCardinality(),
+				len(dbm.docIDs.ToBuffer()))
+		}
+		return dbm, err
 	case lsmkv.StrategyMapCollection:
 		return s.docBitmapInvertedMap(ctx, b, limit, pv)
 	default:
