@@ -19,7 +19,6 @@ import (
 
 	"github.com/weaviate/sroar"
 	"github.com/weaviate/weaviate/adapters/repos/db/lsmkv"
-	"github.com/weaviate/weaviate/adapters/repos/db/roaringset"
 	"github.com/weaviate/weaviate/entities/filters"
 )
 
@@ -45,11 +44,15 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 	case lsmkv.StrategyRoaringSet:
 		return s.docBitmapInvertedRoaringSet(ctx, b, limit, pv)
 	case lsmkv.StrategyRoaringSetRange:
-		dbm, err := s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
+		dbm, err := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
 		if err == nil {
-			bm := roaringset.NewBitmap()
-			bm.Or(dbm.docIDs)
+			fmt.Printf("  ==> search impr op [%s] card [%d] size [%d]\n",
+				pv.operator.Name(), dbm.docIDs.GetCardinality(),
+				len(dbm.docIDs.ToBuffer()))
+		}
 
+		dbm, err = s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
+		if err == nil {
 			fmt.Printf("  ==> search op [%s] card [%d] size [%d]\n",
 				pv.operator.Name(), dbm.docIDs.GetCardinality(),
 				len(dbm.docIDs.ToBuffer()))
@@ -105,6 +108,26 @@ func (s *Searcher) docBitmapInvertedRoaringSetRange(ctx context.Context, b *lsmk
 	}
 
 	reader := lsmkv.NewBucketReaderRoaringSetRange(b.CursorRoaringSetRange, s.logger)
+
+	docIds, err := reader.Read(ctx, binary.BigEndian.Uint64(pv.value), pv.operator)
+	if err != nil {
+		return newDocBitmap(), fmt.Errorf("readerRoaringSetRange: %w", err)
+	}
+
+	out := newUninitializedDocBitmap()
+	out.docIDs = docIds
+	return out, nil
+}
+
+func (s *Searcher) docBitmapInvertedRoaringSetRange2(ctx context.Context, b *lsmkv.Bucket,
+	pv *propValuePair,
+) (docBitmap, error) {
+	if len(pv.value) != 8 {
+		return newDocBitmap(), fmt.Errorf("readerRoaringSetRange: invalid value length %d, should be 8 bytes", len(pv.value))
+	}
+
+	reader := b.ReaderRoaringSetRange()
+	defer reader.Close()
 
 	docIds, err := reader.Read(ctx, binary.BigEndian.Uint64(pv.value), pv.operator)
 	if err != nil {
