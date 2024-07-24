@@ -13,7 +13,6 @@ package roaringsetrange
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/sroar"
@@ -63,7 +62,7 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 		return layer.Additions, nil
 	}
 
-	// 1 less then all readers. last one will be processed in current goroutine
+	// all readers but last one. it will be processed by current goroutine
 	responseChans := make([]chan *readerResp, count-1)
 	for i := range responseChans {
 		responseChans[i] = make(chan *readerResp, 1)
@@ -74,13 +73,12 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 
 	eg, gctx := errors.NewErrorGroupWithContextWrapper(r.logger, ctx)
 	eg.SetLimit(r.concurrency)
-	for i := count - 2; i >= 0; i-- {
-		reader := r.readers[i]
-		responseChan := responseChans[i]
-
+	// start from the oldest ones (biggest)
+	for i := 0; i < count-1; i++ {
+		i := i
 		eg.Go(func() error {
-			layer, err := reader.Read(gctx, value, operator)
-			responseChan <- &readerResp{layer, err}
+			layer, err := r.readers[i].Read(gctx, value, operator)
+			responseChans[i] <- &readerResp{layer, err}
 			return err
 		})
 	}
@@ -90,17 +88,16 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 		return nil, err
 	}
 
+	// start from the newest ones
 	for i := count - 2; i >= 0; i-- {
 		response := <-responseChans[i]
-		fmt.Printf("  ==> resp [%d] err [%v] layer [%v]\n\n", i, response.err, response.layer)
 		if response.err != nil {
 			return nil, response.err
 		}
 
 		response.layer.Additions.AndNot(layer.Deletions)
-		response.layer.Additions.And(layer.Additions)
-		response.layer.Deletions.And(layer.Deletions)
-
+		response.layer.Additions.Or(layer.Additions)
+		response.layer.Deletions.Or(layer.Deletions)
 		layer = response.layer
 	}
 
