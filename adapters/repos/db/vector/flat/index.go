@@ -58,7 +58,7 @@ type flat struct {
 	pool      *pools
 
 	compression string
-	bqCache     cache.Cache[uint64]
+	bqCache     *cache.ShardedPageCache[uint64]
 }
 
 type distanceCalc func(vecAsBytes []byte) (float32, error)
@@ -88,8 +88,7 @@ func New(cfg Config, uc flatent.UserConfig, store *lsmkv.Store) (*flat, error) {
 	}
 	index.initBuckets(context.Background())
 	if uc.BQ.Enabled && uc.BQ.Cache {
-		index.bqCache = cache.NewShardedUInt64LockCache(
-			index.getBQVector, uc.VectorCacheMaxObjects, cfg.Logger, 0, cfg.AllocChecker)
+		index.bqCache = cache.NewShardedPageCache[uint64](int64(uc.VectorCacheMaxObjects), index.getBQVector)
 	}
 
 	return index, nil
@@ -450,43 +449,78 @@ func (index *flat) findTopVectors(heap *priorityqueue.Queue[any],
 
 // populates given heap with smallest distances and corresponding ids calculated by
 // distanceCalc
+// func (index *flat) findTopVectorsCached(heap *priorityqueue.Queue[any],
+// 	allow helpers.AllowList, limit int, vectorBQ []uint64,
+// ) error {
+// 	var id uint64
+// 	allowMax := uint64(0)
+
+// 	if allow != nil {
+// 		// nothing allowed, skip search
+// 		if allow.IsEmpty() {
+// 			return nil
+// 		}
+
+// 		allowMax = allow.Max()
+
+// 		id = allow.Min()
+// 	} else {
+// 		id = 0
+// 	}
+// 	all := index.bqCache.Len()
+
+// 	// since keys are sorted, once key/id get greater than max allowed one
+// 	// further search can be stopped
+// for ; id < uint64(all) && (allow == nil || id <= allowMax); id++ {
+// 	if allow == nil || allow.Contains(id) {
+// 		vec, err := index.bqCache.Get(context.Background(), id)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		if len(vec) == 0 {
+// 			continue
+// 		}
+// 		distance, err := index.bq.DistanceBetweenCompressedVectors(vec, vectorBQ)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		index.insertToHeap(heap, limit, id, distance)
+// 	}
+// }
+// 	return nil
+// }
+
 func (index *flat) findTopVectorsCached(heap *priorityqueue.Queue[any],
 	allow helpers.AllowList, limit int, vectorBQ []uint64,
 ) error {
-	var id uint64
-	allowMax := uint64(0)
-
+	var allowMax uint64
 	if allow != nil {
-		// nothing allowed, skip search
 		if allow.IsEmpty() {
 			return nil
 		}
-
 		allowMax = allow.Max()
-
-		id = allow.Min()
-	} else {
-		id = 0
 	}
-	all := index.bqCache.Len()
 
-	// since keys are sorted, once key/id get greater than max allowed one
-	// further search can be stopped
-	for ; id < uint64(all) && (allow == nil || id <= allowMax); id++ {
-		if allow == nil || allow.Contains(id) {
-			vec, err := index.bqCache.Get(context.Background(), id)
-			if err != nil {
-				return err
-			}
-			if len(vec) == 0 {
-				continue
-			}
-			distance, err := index.bq.DistanceBetweenCompressedVectors(vec, vectorBQ)
-			if err != nil {
-				return err
-			}
-			index.insertToHeap(heap, limit, id, distance)
+	err := index.bqCache.IterateVectors(context.Background(), func(id uint64, vec []uint64) bool {
+		if allow != nil && (id > allowMax || !allow.Contains(id)) {
+			return true // continue iteration
 		}
+
+		if len(vec) == 0 {
+			return true // continue iteration
+		}
+
+		distance, err := index.bq.DistanceBetweenCompressedVectors(vec, vectorBQ)
+		if err != nil {
+			return false // stop iteration
+		}
+
+		index.insertToHeap(heap, limit, id, distance)
+		return true // continue iteration
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to iterate over cache: %w", err)
 	}
 	return nil
 }

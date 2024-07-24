@@ -57,11 +57,11 @@ func (sl *ShardedLocks) LockedAll(callback func()) {
 }
 
 func (sl *ShardedLocks) Lock(id uint64) {
-	sl.shards[id%sl.count].Lock()
+	sl.shards[(id/sl.count)%sl.count].Lock()
 }
 
 func (sl *ShardedLocks) Unlock(id uint64) {
-	sl.shards[id%sl.count].Unlock()
+	sl.shards[(id/sl.count)%sl.count].Unlock()
 }
 
 func (sl *ShardedLocks) Locked(id uint64, callback func()) {
