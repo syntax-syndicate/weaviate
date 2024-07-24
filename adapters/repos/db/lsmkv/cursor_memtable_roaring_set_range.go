@@ -23,3 +23,10 @@ func (m *Memtable) newRoaringSetRangeCursor() roaringsetrange.InnerCursor {
 	// no further memtable's locking in required on cursor's methods
 	return roaringsetrange.NewMemtableCursor(m.roaringSetRange)
 }
+
+func (m *Memtable) newRoaringSetRangeReader() roaringsetrange.InnerReader {
+	m.RLock()
+	defer m.RUnlock()
+
+	return roaringsetrange.NewMemtableReader(m.roaringSetRange)
+}
