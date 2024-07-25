@@ -13,6 +13,8 @@ package roaringsetrange
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/sroar"
@@ -77,16 +79,27 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 	for i := 0; i < count-1; i++ {
 		i := i
 		eg.Go(func() error {
+			s := time.Now()
+			fmt.Printf(" ==> [%d] started reading\n", i)
+
 			layer, err := r.readers[i].Read(gctx, value, operator)
 			responseChans[i] <- &readerResp{layer, err}
+
+			fmt.Printf(" ==> [%d] finished reading, took [%s]\n", i, time.Since(s))
+
 			return err
 		})
 	}
+
+	s := time.Now()
+	fmt.Printf(" ==> [%d] started reading\n", count-1)
 
 	layer, err := r.readers[count-1].Read(ctx, value, operator)
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf(" ==> [%d] finished reading, took [%s]\n", count-1, time.Since(s))
 
 	// start from the newest ones
 	for i := count - 2; i >= 0; i-- {
@@ -95,10 +108,15 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 			return nil, response.err
 		}
 
+		s := time.Now()
+		fmt.Printf(" ==> [%d/%d] started merging\n", i+1, i)
+
 		response.layer.Additions.AndNot(layer.Deletions)
 		response.layer.Additions.Or(layer.Additions)
 		response.layer.Deletions.Or(layer.Deletions)
 		layer = response.layer
+
+		fmt.Printf(" ==> [%d/%d] finished merging, took [%s]\n", i+1, i, time.Since(s))
 	}
 
 	return layer.Additions, nil

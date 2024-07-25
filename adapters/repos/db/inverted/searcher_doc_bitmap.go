@@ -44,20 +44,43 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 	case lsmkv.StrategyRoaringSet:
 		return s.docBitmapInvertedRoaringSet(ctx, b, limit, pv)
 	case lsmkv.StrategyRoaringSetRange:
-		dbm, err := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
+		t := time.Now()
+		dbm, err := s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
 		if err == nil {
-			fmt.Printf("  ==> search impr op [%s] card [%d] size [%d]\n",
-				pv.operator.Name(), dbm.docIDs.GetCardinality(),
-				len(dbm.docIDs.ToBuffer()))
+			fmt.Printf("  ==> search took [%s] op [%s] card [%d] size [%d]\n",
+				time.Since(t).String(), pv.operator.Name(),
+				dbm.docIDs.GetCardinality(), len(dbm.docIDs.ToBuffer()))
 		}
 
-		dbm, err = s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
-		if err == nil {
-			fmt.Printf("  ==> search op [%s] card [%d] size [%d]\n",
-				pv.operator.Name(), dbm.docIDs.GetCardinality(),
-				len(dbm.docIDs.ToBuffer()))
-		}
 		return dbm, err
+
+		// t2 := time.Now()
+		// dbm2, err2 := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
+		// if err2 == nil {
+		// 	fmt.Printf("  ==> search_impr took [%s] op [%s] card [%d] size [%d]\n",
+		// 		time.Since(t2).String(), pv.operator.Name(),
+		// 		dbm2.docIDs.GetCardinality(), len(dbm2.docIDs.ToBuffer()))
+		// }
+
+		// return dbm2, err2
+
+		// t3 := time.Now()
+		// dbm3, err3 := s.docBitmapInvertedRoaringSetRange(ctx, b, pv)
+		// if err3 == nil {
+		// 	fmt.Printf("  ==> search took [%s] op [%s] card [%d] size [%d]\n",
+		// 		time.Since(t3).String(), pv.operator.Name(),
+		// 		dbm3.docIDs.GetCardinality(), len(dbm3.docIDs.ToBuffer()))
+		// }
+
+		// t4 := time.Now()
+		// dbm4, err4 := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
+		// if err4 == nil {
+		// 	fmt.Printf("  ==> search_impr took [%s] op [%s] card [%d] size [%d]\n",
+		// 		time.Since(t4).String(), pv.operator.Name(),
+		// 		dbm4.docIDs.GetCardinality(), len(dbm4.docIDs.ToBuffer()))
+		// }
+
+		// return dbm2, err2
 	case lsmkv.StrategyMapCollection:
 		return s.docBitmapInvertedMap(ctx, b, limit, pv)
 	default:
