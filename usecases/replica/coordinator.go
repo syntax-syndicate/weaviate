@@ -14,6 +14,7 @@ package replica
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -186,37 +187,75 @@ func (c *coordinator[T]) Pull(ctx context.Context,
 	level := state.Level
 	replyCh := make(chan _Result[T], level)
 
-	candidates := state.Hosts[:level]                          // direct ones
-	candidatePool := make(chan string, len(state.Hosts)-level) // remaining ones
-	for _, replica := range state.Hosts[level:] {
+	candidatePool := make(chan string, len(state.Hosts)) // remaining ones
+	for _, replica := range state.Hosts {
 		candidatePool <- replica
 	}
-	close(candidatePool) // pool is ready
+
+	// TODO can i ensure fullRead tries the direct candidate node first? this seems important for perf reasons
+	// failBackOff := time.Second * 20
+	// initialBackOff := time.Millisecond * 250
+	failBackOff := time.Millisecond * 2
+	initialBackOff := time.Millisecond * 1
 	f := func() {
 		wg := sync.WaitGroup{}
-		wg.Add(len(candidates))
-		for i := range candidates { // Ask direct candidate first
-			idx := i
+		wg.Add(level)
+		for i := 0; i < level; i++ { // Ask direct candidate first
+			doFullRead := i == 0
 			f := func() {
+				retryCounter := make(map[string]time.Duration)
+				failedNodes := make(map[string]_Result[T])
 				defer wg.Done()
-				resp, err := op(ctx, candidates[idx], idx == 0)
-
-				// If node is not responding delegate request to another node
-				for err != nil {
-					if delegate, ok := <-candidatePool; ok {
-						resp, err = op(ctx, delegate, idx == 0)
-					} else {
+				for delegate := range candidatePool {
+					if f, ok := failedNodes[delegate]; ok {
+						replyCh <- f
 						break
 					}
+					if r, ok := retryCounter[delegate]; ok {
+						timer := time.NewTimer(r)
+						select {
+						case <-ctx.Done():
+							timer.Stop()
+							break
+						case <-timer.C:
+						}
+						timer.Stop()
+					}
+					resp, err := op(ctx, delegate, doFullRead)
+					// fmt.Println("NATEE op", i, delegate, doFullRead, err)
+					if err == nil {
+						replyCh <- _Result[T]{resp, err}
+						break
+					}
+
+					candidatePool <- delegate
+					var newDelay time.Duration
+					if d, ok := retryCounter[delegate]; ok {
+						newDelay = backOff(d)
+					} else {
+						newDelay = initialBackOff
+					}
+					if newDelay > failBackOff {
+						failedNodes[delegate] = _Result[T]{resp, err}
+					}
+					retryCounter[delegate] = newDelay
+					continue
 				}
-				replyCh <- _Result[T]{resp, err}
 			}
 			enterrors.GoWrapper(f, c.log)
 		}
+
 		wg.Wait()
 		close(replyCh)
 	}
 	enterrors.GoWrapper(f, c.log)
 
 	return replyCh, state, nil
+}
+
+// TODO dry
+// backOff return a new random duration in the interval [d, 3d].
+// It implements truncated exponential back-off with introduced jitter.
+func backOff(d time.Duration) time.Duration {
+	return time.Duration(float64(d.Nanoseconds()*2) * (0.5 + rand.Float64()))
 }
