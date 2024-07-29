@@ -866,13 +866,13 @@
       "x-nullable": true
     },
     "IndexSearchable": {
-      "description": "Whether to include this property in the searchable, inverted index. If `false`, this property cannot be used in `bm25` or `hybrid` searches. <br/><br/>Unrelated to vectorization behavior.",
+      "description": "Whether to include this property in the searchable, inverted index. Applicable only to properties of data type text and text[]. If `false`, this property cannot be used in `bm25` or `hybrid` searches. <br/><br/>Unrelated to vectorization behavior.",
       "default": true,
       "type": "boolean",
       "x-nullable": true
     },
     "indexRangeFilters": {
-      "description": "Optional. Should this property be indexed in the inverted index. Defaults to false. Provides better performance for range queries compared to filterable index in large datasets. Applicable only to properties of data type int, number, date.",
+      "description": "Whether to include this property in the filterable, range-based Roaring Bitmap inverted index. Defaults to false. Provides better performance for range queries compared to filterable index in large datasets. Applicable only to properties of data type int, number, date.",
       "type": "boolean",
       "x-nullable": true
     },
