@@ -31,16 +31,17 @@ import (
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/common"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/compressionhelpers"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/distancer"
+	entcfg "github.com/weaviate/weaviate/entities/config"
 	entlsmkv "github.com/weaviate/weaviate/entities/lsmkv"
 	schemaConfig "github.com/weaviate/weaviate/entities/schema/config"
 	flatent "github.com/weaviate/weaviate/entities/vectorindex/flat"
-	"github.com/weaviate/weaviate/usecases/configbase"
 	"github.com/weaviate/weaviate/usecases/floatcomp"
 )
 
 const (
 	compressionBQ   = "bq"
 	compressionPQ   = "pq"
+	compressionSQ   = "sq"
 	compressionNone = "none"
 )
 
@@ -89,7 +90,10 @@ func New(cfg Config, uc flatent.UserConfig, store *lsmkv.Store) (*flat, error) {
 		pool:              newPools(),
 		store:             store,
 	}
-	index.initBuckets(context.Background())
+	if err := index.initBuckets(context.Background()); err != nil {
+		return nil, fmt.Errorf("init flat index buckets: %w", err)
+	}
+
 	if uc.BQ.Enabled && uc.BQ.Cache {
 		index.bqCache = cache.NewShardedUInt64LockCache(
 			index.getBQVector, uc.VectorCacheMaxObjects, cfg.Logger, 0, cfg.AllocChecker)
@@ -110,16 +114,16 @@ func (flat *flat) getBQVector(ctx context.Context, id uint64) ([]uint64, error) 
 }
 
 func extractCompression(uc flatent.UserConfig) string {
-	if uc.BQ.Enabled && uc.PQ.Enabled {
-		return compressionNone
-	}
-
 	if uc.BQ.Enabled {
 		return compressionBQ
 	}
 
 	if uc.PQ.Enabled {
 		return compressionPQ
+	}
+
+	if uc.SQ.Enabled {
+		return compressionSQ
 	}
 
 	return compressionNone
@@ -132,6 +136,8 @@ func extractCompressionRescore(uc flatent.UserConfig) int64 {
 		return int64(uc.PQ.RescoreLimit)
 	case compressionBQ:
 		return int64(uc.BQ.RescoreLimit)
+	case compressionSQ:
+		return int64(uc.SQ.RescoreLimit)
 	default:
 		return 0
 	}
@@ -204,7 +210,7 @@ func (index *flat) initBuckets(ctx context.Context) error {
 
 // TODO: Remove this function when gh-5241 is completed. See flat::initBuckets for more details.
 func shouldForceCompaction() bool {
-	return !configbase.Enabled(os.Getenv("FLAT_INDEX_DISABLE_FORCED_COMPACTION"))
+	return !entcfg.Enabled(os.Getenv("FLAT_INDEX_DISABLE_FORCED_COMPACTION"))
 }
 
 func (index *flat) AddBatch(ctx context.Context, ids []uint64, vectors [][]float32) error {
@@ -804,4 +810,51 @@ func ValidateUserConfigUpdate(initial, updated schemaConfig.VectorIndexConfig) e
 
 func (index *flat) AlreadyIndexed() uint64 {
 	return atomic.LoadUint64(&index.count)
+}
+
+func (index *flat) QueryVectorDistancer(queryVector []float32) common.QueryVectorDistancer {
+	var distFunc func(nodeID uint64) (float32, error)
+	defaultDistFunc := func(nodeID uint64) (float32, error) {
+		vec, err := index.vectorById(nodeID)
+		if err != nil {
+			return 0, err
+		}
+		dist, _, err := index.distancerProvider.SingleDist(queryVector, float32SliceFromByteSlice(vec, make([]float32, len(vec)/4)))
+		if err != nil {
+			return 0, err
+		}
+		return dist, nil
+	}
+	switch index.compression {
+	case compressionBQ:
+		if index.bqCache == nil {
+			distFunc = defaultDistFunc
+		} else {
+			queryVecEncode := index.bq.Encode(queryVector)
+			distFunc = func(nodeID uint64) (float32, error) {
+				vec, err := index.bqCache.Get(context.Background(), nodeID)
+				if err != nil {
+					return 0, err
+				}
+				return index.bq.DistanceBetweenCompressedVectors(vec, queryVecEncode)
+			}
+		}
+
+	case compressionPQ:
+		// use uncompressed for now
+		fallthrough
+	default:
+		distFunc = func(nodeID uint64) (float32, error) {
+			vec, err := index.vectorById(nodeID)
+			if err != nil {
+				return 0, err
+			}
+			dist, _, err := index.distancerProvider.SingleDist(queryVector, float32SliceFromByteSlice(vec, make([]float32, len(vec)/4)))
+			if err != nil {
+				return 0, err
+			}
+			return dist, nil
+		}
+	}
+	return common.QueryVectorDistancer{DistanceFunc: distFunc}
 }

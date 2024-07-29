@@ -406,6 +406,11 @@
           "default": 1,
           "description": "Number of times a class is replicated",
           "type": "integer"
+        },
+        "asyncEnabled": {
+          "description": "Enable asynchronous replication",
+          "type": "boolean",
+          "x-omitempty": false
         }
       },
       "type": "object"
@@ -766,6 +771,11 @@
         "indexSearchable": {
           "$ref": "#/definitions/IndexSearchable"
         },
+        "indexRangeFilters": {
+          "description": "Optional. Should this property be indexed in the inverted index. Defaults to false. Provides better performance for range queries compared to filterable index in large datasets. Applicable only to properties of data type int, number, date.",
+          "type": "boolean",
+          "x-nullable": true
+        },
         "tokenization": {
           "$ref": "#/definitions/Tokenization"
         },
@@ -847,7 +857,8 @@
         "whitespace",
         "field",
         "trigram",
-        "gse"
+        "gse",
+        "kagome_kr"
       ]
     },
     "IndexFilterable": {
@@ -895,6 +906,10 @@
         },
         "indexSearchable": {
           "$ref": "#/definitions/IndexSearchable"
+        },
+        "indexRangeFilters": {
+          "type": "boolean",
+          "x-nullable": true
         },
         "tokenization": {
           "$ref": "#/definitions/Tokenization"
@@ -2201,13 +2216,19 @@
           "type": "string"
         },
         "activityStatus": {
-          "description": "Activity status of the tenant's shard. Optional for creating tenant (implicit `HOT`) and required for updating tenant. <br/><br/>Allowed values are `HOT` - tenant is fully active, `WARM` - tenant is active, some restrictions are imposed (TBD; not supported yet), `COLD` - tenant is inactive; no actions can be performed on tenant, tenant's files are stored locally, `FROZEN` - as COLD, but files are stored on cloud storage (not supported yet)",
+          "description": "activity status of the tenant's shard. Optional for creating tenant (implicit `ACTIVE`) and required for updating tenant. For creation, allowed values are `ACTIVE` - tenant is fully active and `INACTIVE` - tenant is inactive; no actions can be performed on tenant, tenant's files are stored locally. For updating, `ACTIVE`, `INACTIVE` and also `OFFLOADED` - as INACTIVE, but files are stored on cloud storage. The following values are read-only and are set by the server for internal use: `OFFLOADING` - tenant is transitioning from ACTIVE/INACTIVE to OFFLOADED, `ONLOADING` - tenant is transitioning from OFFLOADED to ACTIVE/INACTIVE. We still accept deprecated names `HOT` (now `ACTIVE`), `COLD` (now `INACTIVE`), `FROZEN` (now `OFFLOADED`), `FREEZING` (now `OFFLOADING`), `UNFREEZING` (now `ONLOADING`).",
           "type": "string",
           "enum": [
+            "ACTIVE",
+            "INACTIVE",
+            "OFFLOADED",
+            "OFFLOADING",
+            "ONLOADING",
             "HOT",
-            "WARM",
             "COLD",
-            "FROZEN"
+            "FROZEN",
+            "FREEZING",
+            "UNFREEZING"
           ]
         }
       }
@@ -2223,7 +2244,7 @@
     },
     "description": "# Introduction\n Weaviate is an open source, AI-native vector database that helps developers create intuitive and reliable AI-powered applications. \n ### Base Path \nThe base path for the Weaviate server is structured as `[YOUR-WEAVIATE-HOST]:[PORT]/v1`. As an example, if you wish to access the `schema` endpoint on a local instance, you would navigate to `http://localhost:8080/v1/schema`. Ensure you replace `[YOUR-WEAVIATE-HOST]` and `[PORT]` with your actual server host and port number respectively. \n ### Questions? \nIf you have any comments or questions, please feel free to reach out to us at the community forum [https://forum.weaviate.io/](https://forum.weaviate.io/). \n### Issues? \nIf you find a bug or want to file a feature request, please open an issue on our GitHub repository for [Weaviate](https://github.com/weaviate/weaviate). \n### Want more documentation? \nFor a quickstart, code examples, concepts and more, please visit our [documentation page](https://weaviate.io/developers/weaviate).",
     "title": "Weaviate",
-    "version": "1.25.6"
+    "version": "1.26.1"
   },
   "parameters": {
     "CommonAfterParameterQuery": {

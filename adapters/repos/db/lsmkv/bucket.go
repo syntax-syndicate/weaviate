@@ -229,6 +229,11 @@ func (*Bucket) NewBucket(ctx context.Context, dir, rootDir string, logger logrus
 
 	b.metrics.TrackStartupBucket(beforeAll)
 
+	if err := GlobalBucketRegistry.TryAdd(dir); err != nil {
+		// prevent accidentally trying to register the same bucket twice
+		return nil, err
+	}
+
 	return b, nil
 }
 
@@ -841,7 +846,7 @@ func (b *Bucket) setNewActiveMemtable() error {
 		return errors.Wrap(err, "init commit logger")
 	}
 
-	mt, err := newMemtable(path, b.strategy, b.secondaryIndices, cl, b.metrics)
+	mt, err := newMemtable(path, b.strategy, b.secondaryIndices, cl, b.metrics, b.logger)
 	if err != nil {
 		return err
 	}
@@ -920,6 +925,8 @@ func (b *Bucket) existsOnDiskAndPreviousMemtable(previous *countStats, key []byt
 }
 
 func (b *Bucket) Shutdown(ctx context.Context) error {
+	defer GlobalBucketRegistry.Remove(b.dir)
+
 	if err := b.disk.shutdown(ctx); err != nil {
 		return err
 	}
