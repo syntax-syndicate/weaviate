@@ -55,7 +55,7 @@ func (c *SegmentCursor) Next() (uint8, roaringset.BitmapLayer, bool) {
 }
 
 type GaplessSegmentCursor struct {
-	cursor *SegmentCursor
+	cursor InnerCursor
 
 	started bool
 	key     uint8
@@ -64,7 +64,7 @@ type GaplessSegmentCursor struct {
 	lastOk  bool
 }
 
-func NewGaplessSegmentCursor(cursor *SegmentCursor) *GaplessSegmentCursor {
+func NewGaplessSegmentCursor(cursor InnerCursor) *GaplessSegmentCursor {
 	return &GaplessSegmentCursor{cursor: cursor, started: false, key: 0}
 }
 

@@ -32,6 +32,23 @@ func (sg *SegmentGroup) newRoaringSetRangeReaders() ([]roaringsetrange.InnerRead
 	return readers, sg.maintenanceLock.RUnlock
 }
 
+func (s *segment) newRoaringSetRangeCursor2() roaringsetrange.InnerCursor {
+	return roaringsetrange.NewGaplessSegmentCursor(
+		roaringsetrange.NewSegmentCursor(s.contents[s.dataStartPos:s.dataEndPos]),
+	)
+}
+
+func (sg *SegmentGroup) newRoaringSetRangeCursors2() ([]roaringsetrange.InnerCursor, func()) {
+	sg.maintenanceLock.RLock()
+
+	cursors := make([]roaringsetrange.InnerCursor, len(sg.segments))
+	for i, segment := range sg.segments {
+		cursors[i] = segment.newRoaringSetRangeCursor2()
+	}
+
+	return cursors, sg.maintenanceLock.RUnlock
+}
+
 func (s *segment) newRoaringSetRangeCursor() *roaringsetrange.SegmentCursor {
 	return roaringsetrange.NewSegmentCursor(s.contents[s.dataStartPos:s.dataEndPos])
 }

@@ -12,6 +12,10 @@
 package roaringsetrange
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/sroar"
 	"github.com/weaviate/weaviate/adapters/repos/db/roaringset"
@@ -186,4 +190,146 @@ func (c *CombinedCursor) getCursorIdsWithLowestKey() (uint8, map[int]struct{}) {
 	}
 
 	return lowestKey, ids
+}
+
+type CombinedCursor2 struct {
+	cursors        []InnerCursor
+	logger         logrus.FieldLogger
+	concurrency    int
+	releaseCursors func()
+
+	started   bool
+	key       uint8
+	deletions []*sroar.Bitmap
+	chans     [64]chan *sroar.Bitmap
+	cancelCtx context.CancelFunc
+}
+
+// assumes no gaps in cursors
+func NewCombinedCursor2(cursors []InnerCursor, logger logrus.FieldLogger, concurrency int,
+	releaseCursors func(),
+) *CombinedCursor2 {
+	return &CombinedCursor2{
+		cursors:        cursors,
+		logger:         logger,
+		key:            0,
+		started:        false,
+		cancelCtx:      nil,
+		deletions:      make([]*sroar.Bitmap, len(cursors)),
+		concurrency:    concurrency,
+		releaseCursors: releaseCursors,
+	}
+}
+
+// TODO safe impl for 0 cursors
+func (c *CombinedCursor2) First() (uint8, *sroar.Bitmap, bool) {
+	c.started = true
+	c.cancel() // cancel ongoing processing to start new one
+
+	for i := range c.chans {
+		c.chans[i] = make(chan *sroar.Bitmap, 1)
+	}
+
+	c.key = 0
+	// additions := make([]*sroar.Bitmap, len(c.cursors))
+	// for i := range c.cursors {
+	// 	key, layer, ok := c.cursors[i].First()
+	// 	if !ok || key != 0 {
+	// 		panic("inner cursor failed1")
+	// 	}
+	// 	c.deletions[i] = layer.Deletions
+	// 	additions[i] = layer.Additions
+	// }
+
+	var merged *sroar.Bitmap
+	for i := range c.cursors {
+		key, layer, ok := c.cursors[i].First()
+		if !ok || key != 0 {
+			panic("inner cursor failed1")
+		}
+		if i == 0 {
+			merged = layer.Additions.Clone()
+		} else {
+			deletions := layer.Deletions.Clone()
+			deletions.And(merged)
+
+			fmt.Printf("  ==> deletions [%2d] size [%d]\n", i, len(deletions.ToBuffer()))
+
+			merged.AndNot(deletions)
+			merged.Or(layer.Additions)
+
+			fmt.Printf("  ==> merged [%2d] size [%d]\n", i, len(deletions.ToBuffer()))
+
+			c.deletions[i] = roaringset.Condense(deletions)
+		}
+	}
+
+	context, cancel := context.WithCancel(context.Background())
+	c.cancelCtx = cancel
+	eg, _ := errors.NewErrorGroupWithContextWrapper(c.logger, context)
+	eg.SetLimit(c.concurrency)
+
+	eg.Go(func() error {
+		for k := uint8(1); k <= 64; k++ {
+			k := k
+			additions := make([]*sroar.Bitmap, len(c.cursors))
+			for i := range c.cursors {
+				key, layer, ok := c.cursors[i].Next()
+				if !ok || key != k {
+					panic("inner cursor failed2")
+				}
+				additions[i] = layer.Additions
+			}
+			eg.Go(func() error {
+				c.chans[k-1] <- c.mergeKey(k, additions)
+				return nil
+			})
+		}
+		return nil
+	})
+
+	return c.key, merged, true
+}
+func (c *CombinedCursor2) Next() (uint8, *sroar.Bitmap, bool) {
+	if !c.started {
+		return c.First()
+	}
+
+	if c.key >= 64 {
+		return 0, nil, false
+	}
+
+	c.key++
+	return c.key, <-c.chans[c.key-1], true
+}
+
+func (c *CombinedCursor2) mergeKey(k uint8, additions []*sroar.Bitmap) *sroar.Bitmap {
+	s := time.Now()
+	fmt.Printf("  ==> key [%2d] merge started\n", k)
+	defer func() {
+		fmt.Printf("  ==> key [%2d] merge finished, took %s\n", k, time.Since(s))
+	}()
+
+	if len(additions) == 0 {
+		return sroar.NewBitmap()
+	}
+
+	merged := additions[0].Clone()
+	for i := 1; i < len(additions); i++ {
+		merged.AndNot(c.deletions[i])
+		merged.Or(additions[i])
+	}
+	return merged
+}
+
+func (c *CombinedCursor2) Close() {
+	c.cancel()
+	c.releaseCursors()
+}
+
+func (c *CombinedCursor2) cancel() {
+	if c.cancelCtx != nil {
+		c.cancelCtx()
+		c.cancelCtx = nil
+	}
 }

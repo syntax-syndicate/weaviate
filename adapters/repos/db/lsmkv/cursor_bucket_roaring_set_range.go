@@ -65,3 +65,28 @@ func (b *Bucket) CursorRoaringSetRange() CursorRoaringSetRange {
 		},
 	}
 }
+
+func (b *Bucket) CursorRoaringSetRange2() CursorRoaringSetRange {
+	MustBeExpectedStrategy(b.strategy, StrategyRoaringSetRange)
+
+	b.flushLock.RLock()
+
+	innerCursors, unlockSegmentGroup := b.disk.newRoaringSetRangeCursors2()
+
+	// we have a flush-RLock, so we have the guarantee that the flushing state
+	// will not change for the lifetime of the cursor, thus there can only be two
+	// states: either a flushing memtable currently exists - or it doesn't
+	if b.flushing != nil {
+		innerCursors = append(innerCursors, roaringsetrange.NewGaplessSegmentCursor(
+			b.flushing.newRoaringSetRangeCursor()))
+	}
+	innerCursors = append(innerCursors, roaringsetrange.NewGaplessSegmentCursor(
+		b.active.newRoaringSetRangeCursor()))
+
+	// cursors are in order from oldest to newest, with the memtable cursor
+	// being at the very top
+	return roaringsetrange.NewCombinedCursor2(innerCursors, b.logger, 4, func() {
+		unlockSegmentGroup()
+		b.flushLock.RUnlock()
+	})
+}

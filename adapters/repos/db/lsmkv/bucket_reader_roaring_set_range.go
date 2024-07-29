@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/sroar"
@@ -198,7 +199,7 @@ func (r *BucketReaderRoaringSetRange) mergeGreaterThanEqual(ctx context.Context,
 	// if first AND-merge occurred. Before that all OR-merges can be skipped
 	// as non-null BM contains all of values, therefore OR with smaller sets
 	// of values will not change result BM
-	ANDed := true
+	ANDed := false
 	prevOR := true  // merge operation of previous loop: OR (true) / AND (false)
 	prevBM := resBM // bitBM of previous loop
 
@@ -394,4 +395,249 @@ func (c *noGapsCursor) next() (uint8, *sroar.Bitmap, bool) {
 
 func (c *noGapsCursor) close() {
 	c.cursor.Close()
+}
+
+type BucketReaderRoaringSetRange2 struct {
+	cursorFn func() CursorRoaringSetRange
+	logger   logrus.FieldLogger
+}
+
+func NewBucketReaderRoaringSetRange2(cursorFn func() CursorRoaringSetRange, logger logrus.FieldLogger,
+) *BucketReaderRoaringSetRange2 {
+	return &BucketReaderRoaringSetRange2{
+		cursorFn: cursorFn,
+		logger:   logger,
+	}
+}
+
+func (r *BucketReaderRoaringSetRange2) Read(ctx context.Context, value uint64,
+	operator filters.Operator,
+) (*sroar.Bitmap, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	switch operator {
+	case filters.OperatorEqual:
+		return r.equal(ctx, value)
+
+	case filters.OperatorNotEqual:
+		return r.notEqual(ctx, value)
+
+	case filters.OperatorGreaterThan:
+		return r.greaterThan(ctx, value)
+
+	case filters.OperatorGreaterThanEqual:
+		return r.greaterThanEqual(ctx, value)
+
+	case filters.OperatorLessThan:
+		return r.lessThan(ctx, value)
+
+	case filters.OperatorLessThanEqual:
+		return r.lessThanEqual(ctx, value)
+
+	default:
+		return nil, fmt.Errorf("operator %v not supported for strategy %q", operator.Name(), StrategyRoaringSetRange)
+	}
+}
+
+func (r *BucketReaderRoaringSetRange2) greaterThanEqual(ctx context.Context, value uint64) (*sroar.Bitmap, error) {
+	resultBM, cursor, ok, err := r.nonNullBMWithCursor(ctx)
+	if !ok {
+		return resultBM, err
+	}
+	defer cursor.Close()
+
+	// all values are >= 0
+	if value == 0 {
+		return resultBM, nil
+	}
+
+	return r.mergeGreaterThanEqual(ctx, resultBM, cursor, value)
+}
+
+func (r *BucketReaderRoaringSetRange2) greaterThan(ctx context.Context, value uint64) (*sroar.Bitmap, error) {
+	// no value is > max uint64
+	if value == math.MaxUint64 {
+		return sroar.NewBitmap(), nil
+	}
+
+	resultBM, cursor, ok, err := r.nonNullBMWithCursor(ctx)
+	if !ok {
+		return resultBM, err
+	}
+	defer cursor.Close()
+
+	return r.mergeGreaterThanEqual(ctx, resultBM, cursor, value+1)
+}
+
+func (r *BucketReaderRoaringSetRange2) lessThanEqual(ctx context.Context, value uint64) (*sroar.Bitmap, error) {
+	resultBM, cursor, ok, err := r.nonNullBMWithCursor(ctx)
+	if !ok {
+		return resultBM, err
+	}
+	defer cursor.Close()
+
+	// all values are <= max uint64
+	if value == math.MaxUint64 {
+		return resultBM, nil
+	}
+
+	greaterThanEqualBM, err := r.mergeGreaterThanEqual(ctx, resultBM.Clone(), cursor, value+1)
+	if err != nil {
+		return nil, err
+	}
+	resultBM.AndNot(greaterThanEqualBM)
+	return resultBM, nil
+}
+
+func (r *BucketReaderRoaringSetRange2) lessThan(ctx context.Context, value uint64) (*sroar.Bitmap, error) {
+	// no value is < 0
+	if value == 0 {
+		return sroar.NewBitmap(), nil
+	}
+
+	resultBM, cursor, ok, err := r.nonNullBMWithCursor(ctx)
+	if !ok {
+		return resultBM, err
+	}
+	defer cursor.Close()
+
+	greaterThanEqualBM, err := r.mergeGreaterThanEqual(ctx, resultBM.Clone(), cursor, value)
+	if err != nil {
+		return nil, err
+	}
+	resultBM.AndNot(greaterThanEqualBM)
+	return resultBM, nil
+}
+
+func (r *BucketReaderRoaringSetRange2) equal(ctx context.Context, value uint64) (*sroar.Bitmap, error) {
+	if value == 0 {
+		return r.lessThanEqual(ctx, value)
+	}
+	if value == math.MaxUint64 {
+		return r.greaterThanEqual(ctx, value)
+	}
+
+	resultBM, cursor, ok, err := r.nonNullBMWithCursor(ctx)
+	if !ok {
+		return resultBM, err
+	}
+	defer cursor.Close()
+
+	return r.mergeBetween(ctx, resultBM, cursor, value, value+1)
+}
+
+func (r *BucketReaderRoaringSetRange2) notEqual(ctx context.Context, value uint64) (*sroar.Bitmap, error) {
+	if value == 0 {
+		return r.greaterThan(ctx, value)
+	}
+	if value == math.MaxUint64 {
+		return r.lessThan(ctx, value)
+	}
+
+	resultBM, cursor, ok, err := r.nonNullBMWithCursor(ctx)
+	if !ok {
+		return resultBM, err
+	}
+
+	equalBM, err := r.mergeBetween(ctx, resultBM.Clone(), cursor, value, value+1)
+	if err != nil {
+		return nil, err
+	}
+	resultBM.AndNot(equalBM)
+	return resultBM, nil
+}
+
+func (r *BucketReaderRoaringSetRange2) nonNullBMWithCursor(ctx context.Context,
+) (*sroar.Bitmap, CursorRoaringSetRange, bool, error) {
+	cursor := r.cursorFn()
+	_, nonNullBM, _ := cursor.First()
+
+	// if non-null bm is nil or empty, no values are present
+	if nonNullBM.IsEmpty() {
+		cursor.Close()
+		return sroar.NewBitmap(), nil, false, nil
+	}
+
+	if ctx.Err() != nil {
+		cursor.Close()
+		return nil, nil, false, ctx.Err()
+	}
+
+	return nonNullBM, cursor, true, nil
+}
+
+func (r *BucketReaderRoaringSetRange2) mergeGreaterThanEqual(ctx context.Context, resBM *sroar.Bitmap,
+	cursor CursorRoaringSetRange, value uint64,
+) (*sroar.Bitmap, error) {
+	fmt.Printf("  ==> val [%d] merging started\n", value)
+	defer func() {
+		fmt.Printf("  ==> val [%d] merging finished\n", value)
+	}()
+
+	// if first AND-merge occurred. Before that all OR-merges can be skipped
+	// as non-null BM contains all of values, therefore OR with smaller sets
+	// of values will not change result BM
+	ANDed := false
+
+	for bit, bitBM, ok := cursor.Next(); ok; bit, bitBM, ok = cursor.Next() {
+		s := time.Now()
+		fmt.Printf("  ==> val [%d] iter key [%d] started\n", value, bit)
+
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		if value&(1<<(bit-1)) != 0 {
+			ANDed = true
+			resBM.And(bitBM)
+			// resBM = roaringset.Condense(resBM)
+		} else if ANDed {
+			resBM.Or(bitBM)
+		}
+
+		fmt.Printf("  ==> val [%d] iter key [%d] finished, took %s\n", value, bit, time.Since(s))
+
+	}
+
+	return resBM, nil
+}
+
+func (r *BucketReaderRoaringSetRange2) mergeBetween(ctx context.Context, resBM *sroar.Bitmap,
+	cursor CursorRoaringSetRange, valueMinInc, valueMaxExc uint64,
+) (*sroar.Bitmap, error) {
+	// if first AND-merge occurred. Before that all OR-merges can be skipped
+	// as non-null BM contains all of values, therefore OR with smaller sets
+	// of values will not change result BM
+	ANDedMin := false
+	ANDedMax := false
+
+	resBMMin := resBM
+	resBMMax := resBM.Clone()
+
+	for bit, bitBM, ok := cursor.Next(); ok; bit, bitBM, ok = cursor.Next() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		var b uint64 = 1 << (bit - 1)
+
+		if valueMinInc&b != 0 {
+			ANDedMin = true
+			resBMMin.And(bitBM)
+		} else if ANDedMin {
+			resBMMin.Or(bitBM)
+		}
+
+		if valueMaxExc&b != 0 {
+			ANDedMax = true
+			resBMMax.And(bitBM)
+		} else if ANDedMax {
+			resBMMax.Or(bitBM)
+		}
+	}
+
+	resBMMin.AndNot(resBMMax)
+	return resBMMin, nil
 }
