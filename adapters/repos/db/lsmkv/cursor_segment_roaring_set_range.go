@@ -17,9 +17,96 @@ import (
 
 func (s *segment) newRoaringSetRangeReader() *roaringsetrange.SegmentReader {
 	segmentCursor := roaringsetrange.NewSegmentCursor(s.contents[s.dataStartPos:s.dataEndPos])
+
+	// fmt.Printf("analysis started [%s]\n", s.path)
+
+	// arTotalAddCount := 0
+	// arTotalAddCard := 0
+	// bmTotalAddCount := 0
+	// bmTotalAddCard := 0
+
+	// arTotalDelCount := 0
+	// arTotalDelCard := 0
+	// bmTotalDelCount := 0
+	// bmTotalDelCard := 0
+
+	// for key, layer, ok := segmentCursor.First(); ok; key, layer, ok = segmentCursor.Next() {
+	// 	if layer.Additions != nil {
+	// 		arCount, arCard, bmCount, bmCard := layer.Additions.Stats()
+	// 		fmt.Printf("[%d] key additions\n"+
+	// 			"    array count [%d] card [%d] avg.card [%.3f]\n"+
+	// 			"    bitmap count [%d] card [%d] avg.card [%.3f]\n"+
+	// 			"    bm:ar ratio count [%.3f] card [%.3f]\n",
+	// 			key, arCount, arCard, float32(arCard)/float32(arCount),
+	// 			bmCount, bmCard, float32(bmCard)/float32(bmCount),
+	// 			float32(bmCount)/float32(bmCount+arCount), float32(bmCard)/float32(bmCard+arCard))
+
+	// 		arTotalAddCount += arCount
+	// 		arTotalAddCard += arCard
+	// 		bmTotalAddCount += bmCount
+	// 		bmTotalAddCard += bmCard
+	// 	}
+	// 	if layer.Deletions != nil {
+	// 		arCount, arCard, bmCount, bmCard := layer.Deletions.Stats()
+	// 		fmt.Printf("[%d] key deletions\n"+
+	// 			"    array count [%d] card [%d] avg.card [%.3f]\n"+
+	// 			"    bitmap count [%d] card [%d] avg.card [%.3f]\n"+
+	// 			"    bm:ar ratio count [%.3f] card [%.3f]\n",
+	// 			key, arCount, arCard, float32(arCard)/float32(arCount),
+	// 			bmCount, bmCard, float32(bmCard)/float32(bmCount),
+	// 			float32(bmCount)/float32(bmCount+arCount), float32(bmCard)/float32(bmCard+arCard))
+
+	// 		arTotalDelCount += arCount
+	// 		arTotalDelCard += arCard
+	// 		bmTotalDelCount += bmCount
+	// 		bmTotalDelCard += bmCard
+	// 	}
+	// }
+	// fmt.Printf("analysis finished [%s]\n"+
+	// 	"    add array count [%d] card [%d] avg.card [%.3f]\n"+
+	// 	"    add bitmap count [%d] card [%d] avg.card [%.3f]\n"+
+	// 	"    add bm:ar ratio count [%.3f] card [%.3f]\n"+
+	// 	"    del array count [%d] card [%d] avg.card [%.3f]\n"+
+	// 	"    del bitmap count [%d] card [%d] avg.card [%.3f]\n"+
+	// 	"    add bm:ar ratio count [%.3f] card [%.3f]\n\n",
+	// 	s.path, arTotalAddCount, arTotalAddCard, float32(arTotalAddCard)/float32(arTotalAddCount),
+	// 	bmTotalAddCount, bmTotalAddCard, float32(bmTotalAddCard)/float32(bmTotalAddCount),
+	// 	float32(bmTotalAddCount)/float32(bmTotalAddCount+arTotalAddCount),
+	// 	float32(bmTotalAddCard)/float32(bmTotalAddCard+arTotalAddCard),
+	// 	arTotalDelCount, arTotalDelCard, float32(arTotalDelCard)/float32(arTotalDelCount),
+	// 	bmTotalDelCount, bmTotalDelCard, float32(bmTotalDelCard)/float32(bmTotalDelCount),
+	// 	float32(bmTotalDelCount)/float32(bmTotalDelCount+arTotalDelCount),
+	// 	float32(bmTotalDelCard)/float32(bmTotalDelCard+arTotalDelCard))
+
 	gaplessSegmentCursor := roaringsetrange.NewGaplessSegmentCursor(segmentCursor)
 	return roaringsetrange.NewSegmentReader(gaplessSegmentCursor)
 }
+
+// func (ra *Bitmap) Stats() (int, int, int, int) {
+// 	bmCount := 0
+// 	arCount := 0
+
+// 	bmCard := 0
+// 	arCard := 0
+
+// 	l := ra.keys.numKeys()
+// 	for i := 0; i < l; i++ {
+// 		off := ra.keys.val(i)
+// 		c := ra.getContainer(off)
+// 		card := getCardinality(c)
+
+// 		if c[indexType] == typeBitmap {
+// 			bmCount++
+// 			bmCard += card
+// 		}
+// 		if c[indexType] == typeArray {
+// 			arCount++
+// 			arCard += card
+// 		}
+// 	}
+
+// 	return arCount, arCard, bmCount, bmCard
+// }
 
 func (sg *SegmentGroup) newRoaringSetRangeReaders() ([]roaringsetrange.InnerReader, func()) {
 	sg.maintenanceLock.RLock()
