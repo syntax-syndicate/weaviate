@@ -73,8 +73,7 @@ func (r *CombinedReaderBS) Read(ctx context.Context, value uint64, operator filt
 
 	eg, gctx := errors.NewErrorGroupWithContextWrapper(r.logger, ctx)
 	eg.SetLimit(r.concurrency)
-	// start from the oldest ones (biggest)
-	for i := 0; i < count-1; i++ {
+	for i := count - 2; i >= 0; i-- {
 		i := i
 		eg.Go(func() error {
 			s := time.Now()

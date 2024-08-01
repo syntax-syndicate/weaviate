@@ -30,3 +30,10 @@ func (m *Memtable) newRoaringSetRangeReader() roaringsetrange.InnerReader {
 
 	return roaringsetrange.NewMemtableReader(m.roaringSetRange)
 }
+
+func (m *Memtable) newRoaringSetRangeReaderBS() roaringsetrange.InnerReaderBS {
+	m.RLock()
+	defer m.RUnlock()
+
+	return roaringsetrange.NewMemtableReaderBS(m.roaringSetRange)
+}

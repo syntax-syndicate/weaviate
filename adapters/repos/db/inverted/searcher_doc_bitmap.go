@@ -53,14 +53,14 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 		// }
 		// return dbm, err
 
-		t2 := time.Now()
-		dbm2, err2 := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
-		if err2 == nil {
-			fmt.Printf("  ==> search_impr took [%s] op [%s] card [%d] size [%d]\n",
-				time.Since(t2).String(), pv.operator.Name(),
-				dbm2.docIDs.GetCardinality(), len(dbm2.docIDs.ToBuffer()))
-		}
-		return dbm2, err2
+		// t2 := time.Now()
+		// dbm2, err2 := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
+		// if err2 == nil {
+		// 	fmt.Printf("  ==> search_impr took [%s] op [%s] card [%d] size [%d]\n",
+		// 		time.Since(t2).String(), pv.operator.Name(),
+		// 		dbm2.docIDs.GetCardinality(), len(dbm2.docIDs.ToBuffer()))
+		// }
+		// return dbm2, err2
 
 		// t3 := time.Now()
 		// dbm3, err3 := s.docBitmapInvertedRoaringSetRange3(ctx, b, pv)
@@ -71,15 +71,14 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 		// }
 		// return dbm3, err3
 
-		// t4 := time.Now()
-		// dbm4, err4 := s.docBitmapInvertedRoaringSetRange2(ctx, b, pv)
-		// if err4 == nil {
-		// 	fmt.Printf("  ==> search_impr took [%s] op [%s] card [%d] size [%d]\n",
-		// 		time.Since(t4).String(), pv.operator.Name(),
-		// 		dbm4.docIDs.GetCardinality(), len(dbm4.docIDs.ToBuffer()))
-		// }
-
-		// return dbm2, err2
+		t_reader_bs := time.Now()
+		dbm_reader_bs, err_reader_bs := s.docBitmapInvertedRoaringSetRange_Reader_BitSet(ctx, b, pv)
+		if err_reader_bs == nil {
+			fmt.Printf("  ==> search reader bitset took [%s] op [%s] card [%d] size [%d]\n",
+				time.Since(t_reader_bs).String(), pv.operator.Name(),
+				dbm_reader_bs.docIDs.GetCardinality(), len(dbm_reader_bs.docIDs.ToBuffer()))
+		}
+		return dbm_reader_bs, err_reader_bs
 	case lsmkv.StrategyMapCollection:
 		return s.docBitmapInvertedMap(ctx, b, limit, pv)
 	default:
@@ -160,7 +159,7 @@ func (s *Searcher) docBitmapInvertedRoaringSetRange3(ctx context.Context, b *lsm
 	return out, nil
 }
 
-func (s *Searcher) docBitmapInvertedRoaringSetRange2(ctx context.Context, b *lsmkv.Bucket,
+func (s *Searcher) docBitmapInvertedRoaringSetRange_Reader(ctx context.Context, b *lsmkv.Bucket,
 	pv *propValuePair,
 ) (docBitmap, error) {
 	if len(pv.value) != 8 {
@@ -177,6 +176,28 @@ func (s *Searcher) docBitmapInvertedRoaringSetRange2(ctx context.Context, b *lsm
 
 	out := newUninitializedDocBitmap()
 	out.docIDs = docIds
+	return out, nil
+}
+
+func (s *Searcher) docBitmapInvertedRoaringSetRange_Reader_BitSet(ctx context.Context, b *lsmkv.Bucket,
+	pv *propValuePair,
+) (docBitmap, error) {
+	if len(pv.value) != 8 {
+		return newDocBitmap(), fmt.Errorf("readerRoaringSetRange: invalid value length %d, should be 8 bytes", len(pv.value))
+	}
+
+	reader := b.ReaderRoaringSetRangeBS()
+	defer reader.Close()
+
+	bitset, err := reader.Read(ctx, binary.BigEndian.Uint64(pv.value), pv.operator)
+	if err != nil {
+		return newDocBitmap(), fmt.Errorf("readerRoaringSetRange: %w", err)
+	}
+
+	out := newUninitializedDocBitmap()
+	t := time.Now()
+	out.docIDs = bitset.ToSroar()
+	fmt.Printf("  ==> conversion from bitset to sroar took [%s]\n", time.Since(t))
 	return out, nil
 }
 
