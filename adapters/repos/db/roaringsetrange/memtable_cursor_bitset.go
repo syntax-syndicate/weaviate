@@ -22,8 +22,8 @@ type MemtableCursorBS struct {
 	nextPos int
 }
 
-func NewMemtableCursorBS(memtable *Memtable) *MemtableCursor {
-	return &MemtableCursor{nodes: memtable.Nodes()}
+func NewMemtableCursorBS(memtable *Memtable) *MemtableCursorBS {
+	return &MemtableCursorBS{nodes: memtable.NodesBS()}
 }
 
 func (c *MemtableCursorBS) First() (uint8, BitSetLayer, bool) {

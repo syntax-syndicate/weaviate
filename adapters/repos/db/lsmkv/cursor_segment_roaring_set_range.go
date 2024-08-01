@@ -276,6 +276,20 @@ func (sg *SegmentGroup) newRoaringSetRangeCursors() ([]roaringsetrange.InnerCurs
 	return cursors, sg.maintenanceLock.RUnlock
 }
 
+func (s *segment) newRoaringSetRangeCursorBS() *roaringsetrange.SegmentCursorBS {
+	return roaringsetrange.NewSegmentCursorBS(s.contents[s.dataStartPos:s.dataEndPos])
+}
+
+func (sg *SegmentGroup) newRoaringSetRangeCursorsBS() ([]roaringsetrange.InnerCursorBS, func()) {
+	sg.maintenanceLock.RLock()
+
+	cursors := make([]roaringsetrange.InnerCursorBS, len(sg.segments))
+	for i, segment := range sg.segments {
+		cursors[i] = segment.newRoaringSetRangeCursorBS()
+	}
+	return cursors, sg.maintenanceLock.RUnlock
+}
+
 func (s *segment) newRoaringSetRangeReaderBS() *roaringsetrange.SegmentReaderBS {
 	segmentCursor := roaringsetrange.NewSegmentCursorBS(s.contents[s.dataStartPos:s.dataEndPos])
 	gaplessSegmentCursor := roaringsetrange.NewGaplessSegmentCursorBS(segmentCursor)

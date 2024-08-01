@@ -31,6 +31,15 @@ func (m *Memtable) newRoaringSetRangeReader() roaringsetrange.InnerReader {
 	return roaringsetrange.NewMemtableReader(m.roaringSetRange)
 }
 
+func (m *Memtable) newRoaringSetRangeCursorBS() roaringsetrange.InnerCursorBS {
+	m.RLock()
+	defer m.RUnlock()
+
+	// Since Nodes makes deep copy of memtable bitmaps,
+	// no further memtable's locking in required on cursor's methods
+	return roaringsetrange.NewMemtableCursorBS(m.roaringSetRange)
+}
+
 func (m *Memtable) newRoaringSetRangeReaderBS() roaringsetrange.InnerReaderBS {
 	m.RLock()
 	defer m.RUnlock()
