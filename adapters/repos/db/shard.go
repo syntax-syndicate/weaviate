@@ -1317,6 +1317,7 @@ func (s *Shard) createPropertyValueIndex(ctx context.Context, prop *models.Prope
 			helpers.BucketRangeableFromPropNameLSM(prop.Name),
 			append(bucketOpts,
 				lsmkv.WithStrategy(lsmkv.StrategyRoaringSetRange),
+				lsmkv.WithPread(true),
 				lsmkv.WithUseBloomFilter(false),
 				lsmkv.WithCalcCountNetAdditions(false),
 			)...,
