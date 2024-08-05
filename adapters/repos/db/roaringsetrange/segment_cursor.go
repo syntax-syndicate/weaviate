@@ -110,7 +110,6 @@ func (c *GaplessSegmentCursor) Next() (uint8, roaringset.BitmapLayer, bool) {
 // You can start at the beginning using [*SegmentCursor.First] and move forward
 // using [*SegmentCursor.Next]
 type SegmentCursorReader struct {
-	offset     int64
 	readSeeker io.ReadSeeker
 	reader     *bufio.Reader
 }
@@ -123,16 +122,15 @@ type SegmentCursorReader struct {
 //
 // Therefore if the payload is part of a longer continuous buffer, the cursor
 // should be initialized with data[payloadStartPos:payloadEndPos]
-func NewSegmentCursorReader(readSeeker io.ReadSeeker, offset int64) *SegmentCursorReader {
+func NewSegmentCursorReader(readSeeker io.ReadSeeker) *SegmentCursorReader {
 	return &SegmentCursorReader{
 		readSeeker: readSeeker,
 		reader:     bufio.NewReaderSize(readSeeker, 1024*1024),
-		offset:     offset,
 	}
 }
 
 func (c *SegmentCursorReader) First() (uint8, roaringset.BitmapLayer, bool) {
-	c.readSeeker.Seek(c.offset, io.SeekStart)
+	c.readSeeker.Seek(0, io.SeekStart)
 	c.reader.Reset(c.readSeeker)
 	return c.Next()
 }

@@ -12,12 +12,15 @@
 package lsmkv
 
 import (
+	"io"
+
 	"github.com/weaviate/weaviate/adapters/repos/db/lsmkv/segmentindex"
 	"github.com/weaviate/weaviate/adapters/repos/db/roaringsetrange"
 )
 
 func (s *segment) newRoaringSetRangeReader() *roaringsetrange.SegmentReader {
-	segmentCursor := roaringsetrange.NewSegmentCursorReader(s.contentFile, segmentindex.HeaderSize)
+	sectionReader := io.NewSectionReader(s.contentFile, segmentindex.HeaderSize, s.size)
+	segmentCursor := roaringsetrange.NewSegmentCursorReader(sectionReader)
 
 	// fmt.Printf("analysis started [%s]\n", s.path)
 
@@ -138,7 +141,8 @@ func (sg *SegmentGroup) newRoaringSetRangeCursors2() ([]roaringsetrange.InnerCur
 }
 
 func (s *segment) newRoaringSetRangeCursor() *roaringsetrange.SegmentCursorReader {
-	return roaringsetrange.NewSegmentCursorReader(s.contentFile, segmentindex.HeaderSize)
+	sectionReader := io.NewSectionReader(s.contentFile, segmentindex.HeaderSize, s.size)
+	return roaringsetrange.NewSegmentCursorReader(sectionReader)
 }
 
 func (sg *SegmentGroup) newRoaringSetRangeCursors() ([]roaringsetrange.InnerCursor, func()) {
