@@ -281,8 +281,13 @@ func (sg *SegmentGroup) newRoaringSetRangeCursors() ([]roaringsetrange.InnerCurs
 	return cursors, sg.maintenanceLock.RUnlock
 }
 
-func (s *segment) newRoaringSetRangeCursorBS() *roaringsetrange.SegmentCursorBS {
-	return roaringsetrange.NewSegmentCursorBS(s.contents[s.dataStartPos:s.dataEndPos])
+// func (s *segment) newRoaringSetRangeCursorBS() *roaringsetrange.SegmentCursorBS {
+// 	return roaringsetrange.NewSegmentCursorBS(s.contents[s.dataStartPos:s.dataEndPos])
+// }
+
+func (s *segment) newRoaringSetRangeCursorBS() *roaringsetrange.SegmentCursorBSReader {
+	sectionReader := io.NewSectionReader(s.contentFile, segmentindex.HeaderSize, s.size)
+	return roaringsetrange.NewSegmentCursorBSReader(sectionReader)
 }
 
 func (sg *SegmentGroup) newRoaringSetRangeCursorsBS() ([]roaringsetrange.InnerCursorBS, func()) {
@@ -295,8 +300,15 @@ func (sg *SegmentGroup) newRoaringSetRangeCursorsBS() ([]roaringsetrange.InnerCu
 	return cursors, sg.maintenanceLock.RUnlock
 }
 
+// func (s *segment) newRoaringSetRangeReaderBS() *roaringsetrange.SegmentReaderBS {
+// 	segmentCursor := roaringsetrange.NewSegmentCursorBS(s.contents[s.dataStartPos:s.dataEndPos])
+// 	gaplessSegmentCursor := roaringsetrange.NewGaplessSegmentCursorBS(segmentCursor)
+// 	return roaringsetrange.NewSegmentReaderBS(gaplessSegmentCursor)
+// }
+
 func (s *segment) newRoaringSetRangeReaderBS() *roaringsetrange.SegmentReaderBS {
-	segmentCursor := roaringsetrange.NewSegmentCursorBS(s.contents[s.dataStartPos:s.dataEndPos])
+	sectionReader := io.NewSectionReader(s.contentFile, segmentindex.HeaderSize, s.size)
+	segmentCursor := roaringsetrange.NewSegmentCursorBSReader(sectionReader)
 	gaplessSegmentCursor := roaringsetrange.NewGaplessSegmentCursorBS(segmentCursor)
 	return roaringsetrange.NewSegmentReaderBS(gaplessSegmentCursor)
 }
