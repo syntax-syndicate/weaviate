@@ -127,9 +127,9 @@ type SegmentCursorReader struct {
 func NewSegmentCursorReader(readSeeker io.ReadSeeker) *SegmentCursorReader {
 	return &SegmentCursorReader{
 		readSeeker: readSeeker,
-		reader:     bufio.NewReaderSize(readSeeker, 1024*1024),
+		reader:     bufio.NewReaderSize(readSeeker, 10*1024*1024),
 		lenBuf:     make([]byte, 8),
-		dataBuf:    make([]byte, 10*1024),
+		dataBuf:    make([]byte, 0),
 	}
 }
 
@@ -158,6 +158,7 @@ func (c *SegmentCursorReader) Next() (uint8, roaringset.BitmapLayer, bool) {
 	// TODO pool
 	nodeLen := binary.LittleEndian.Uint64(c.lenBuf)
 	if uint64(cap(c.dataBuf)) < nodeLen {
+		fmt.Printf("  ==> extending data buf from [%d] tp [%d]\n", cap(c.dataBuf), nodeLen)
 		c.dataBuf = make([]byte, nodeLen)
 	} else {
 		c.dataBuf = c.dataBuf[:nodeLen]

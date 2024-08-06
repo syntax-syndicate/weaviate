@@ -76,15 +76,15 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 	errors.GoWrapper(func() {
 		eg, gctx := errors.NewErrorGroupWithContextWrapper(r.logger, ctx)
 		eg.SetLimit(r.concurrency)
-		// start from the oldest ones (biggest)
-		for i := count - 2; i >= 0; i-- {
+
+		for i := 1; i < count; i++ {
 			i := i
 			eg.Go(func() error {
 				s := time.Now()
 				fmt.Printf(" ==> [%d] started reading\n", i)
 
 				layer, err := r.readers[i].Read(gctx, value, operator)
-				responseChans[i] <- &readerResp{layer, err}
+				responseChans[i-1] <- &readerResp{layer, err}
 
 				fmt.Printf(" ==> [%d] finished reading, took [%s]\n", i, time.Since(s))
 
@@ -94,32 +94,41 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 	}, r.logger)
 
 	s := time.Now()
-	fmt.Printf(" ==> [%d] started reading\n", count-1)
+	fmt.Printf(" ==> [%d] started reading\n", 0)
 
-	layer, err := r.readers[count-1].Read(ctx, value, operator)
+	layer, err := r.readers[0].Read(ctx, value, operator)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Printf(" ==> [%d] finished reading, took [%s]\n", count-1, time.Since(s))
+	fmt.Printf(" ==> [%d] finished reading, took [%s]\n", 0, time.Since(s))
 
+	var d_merge, d_merge_total time.Duration
 	// start from the newest ones
-	for i := count - 2; i >= 0; i-- {
-		response := <-responseChans[i]
+	for i := 1; i < count; i++ {
+		response := <-responseChans[i-1]
 		if response.err != nil {
 			return nil, response.err
 		}
 
 		s := time.Now()
-		fmt.Printf(" ==> [%d/%d] started merging\n", i+1, i)
+		fmt.Printf(" ==> [%d/%d] started merging\n", i-1, i)
 
-		response.layer.Additions.AndNot(layer.Deletions)
-		response.layer.Additions.Or(layer.Additions)
-		response.layer.Deletions.Or(layer.Deletions)
-		layer = response.layer
+		layer.Additions.AndNot(response.layer.Deletions)
+		layer.Additions.Or(response.layer.Additions)
 
-		fmt.Printf(" ==> [%d/%d] finished merging, took [%s]\n", i+1, i, time.Since(s))
+		// response.layer.Additions.AndNot(layer.Deletions)
+		// response.layer.Additions.Or(layer.Additions)
+		// response.layer.Deletions.Or(layer.Deletions)
+		// layer = response.layer
+
+		d_merge = time.Since(s)
+		d_merge_total += d_merge
+
+		fmt.Printf(" ==> [%d/%d] finished merging, took [%s]\n", i-1, i, d_merge)
 	}
+
+	fmt.Printf(" ==> MERGING segments took [%s]\n", d_merge_total)
 
 	return layer.Additions, nil
 }
