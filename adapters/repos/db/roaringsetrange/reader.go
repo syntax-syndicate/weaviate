@@ -73,23 +73,25 @@ func (r *CombinedReader) Read(ctx context.Context, value uint64, operator filter
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	eg, gctx := errors.NewErrorGroupWithContextWrapper(r.logger, ctx)
-	eg.SetLimit(r.concurrency)
-	// start from the oldest ones (biggest)
-	for i := count - 2; i >= 0; i-- {
-		i := i
-		eg.Go(func() error {
-			s := time.Now()
-			fmt.Printf(" ==> [%d] started reading\n", i)
+	errors.GoWrapper(func() {
+		eg, gctx := errors.NewErrorGroupWithContextWrapper(r.logger, ctx)
+		eg.SetLimit(r.concurrency)
+		// start from the oldest ones (biggest)
+		for i := count - 2; i >= 0; i-- {
+			i := i
+			eg.Go(func() error {
+				s := time.Now()
+				fmt.Printf(" ==> [%d] started reading\n", i)
 
-			layer, err := r.readers[i].Read(gctx, value, operator)
-			responseChans[i] <- &readerResp{layer, err}
+				layer, err := r.readers[i].Read(gctx, value, operator)
+				responseChans[i] <- &readerResp{layer, err}
 
-			fmt.Printf(" ==> [%d] finished reading, took [%s]\n", i, time.Since(s))
+				fmt.Printf(" ==> [%d] finished reading, took [%s]\n", i, time.Since(s))
 
-			return err
-		})
-	}
+				return err
+			})
+		}
+	}, r.logger)
 
 	s := time.Now()
 	fmt.Printf(" ==> [%d] started reading\n", count-1)
