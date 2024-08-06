@@ -52,6 +52,7 @@ type flat struct {
 	sync.Mutex
 	id                  string
 	targetVector        string
+	rootPath            string
 	dims                int32
 	store               *lsmkv.Store
 	logger              logrus.FieldLogger
@@ -86,6 +87,7 @@ func New(cfg Config, uc flatent.UserConfig, store *lsmkv.Store) (*flat, error) {
 	index := &flat{
 		id:                   cfg.ID,
 		targetVector:         cfg.TargetVector,
+		rootPath:             cfg.RootPath,
 		logger:               logger,
 		distancerProvider:    cfg.DistanceProvider,
 		rescore:              extractCompressionRescore(uc),
@@ -103,6 +105,8 @@ func New(cfg Config, uc flatent.UserConfig, store *lsmkv.Store) (*flat, error) {
 		index.bqCache = cache.NewShardedUInt64LockCache(
 			index.getBQVector, uc.VectorCacheMaxObjects, cfg.Logger, 0, cfg.AllocChecker)
 	}
+
+	index.initDimensions()
 
 	return index, nil
 }
@@ -292,7 +296,12 @@ func float32SliceFromByteSlice(vector []byte, slice []float32) []float32 {
 
 func (index *flat) Add(id uint64, vector []float32) error {
 	index.trackDimensionsOnce.Do(func() {
-		atomic.StoreInt32(&index.dims, int32(len(vector)))
+		size := int32(len(vector))
+		atomic.StoreInt32(&index.dims, size)
+		err := index.setDimensions(size)
+		if err != nil {
+			index.logger.WithError(err).Error("could not set dimensions")
+		}
 
 		if index.isBQ() {
 			index.bq = compressionhelpers.NewBinaryQuantizer(nil)

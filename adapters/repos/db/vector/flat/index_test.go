@@ -82,6 +82,7 @@ func run(dirName string, logger *logrus.Logger, compression string, vectorCache 
 	}
 	index, err := New(Config{
 		ID:               runId,
+		RootPath:         dirName,
 		DistanceProvider: distancer,
 	}, flatent.UserConfig{
 		PQ: pq,
@@ -291,6 +292,7 @@ func TestFlat_QueryVectorDistancer(t *testing.T) {
 
 			index, err := New(Config{
 				ID:               "id",
+				RootPath:         dirName,
 				DistanceProvider: distancr,
 			}, flatent.UserConfig{
 				PQ: pq,
@@ -342,4 +344,43 @@ func TestConcurrentReads(t *testing.T) {
 			assert.Less(t, latency, float32(1_000_000))
 		})
 	}
+}
+
+func Test_RestoreDimensionsFlatIndex(t *testing.T) {
+	store := testinghelpers.NewDummyStore(t)
+	rootPath := t.TempDir()
+	defer store.Shutdown(context.Background())
+	indexID := "restore-dimensions"
+	distancer := distancer.NewCosineDistanceProvider()
+
+	config := flatent.UserConfig{}
+	config.SetDefaults()
+
+	index, err := New(Config{
+		ID:               indexID,
+		RootPath:         rootPath,
+		DistanceProvider: distancer,
+	}, config, store)
+
+	require.Nil(t, err)
+
+	index.Add(1, []float32{1, 2, 3})
+
+	require.Equal(t, index.dims, int32(3))
+
+	index.Shutdown(context.Background())
+	index = nil
+
+	index, err = New(Config{
+		ID:               indexID,
+		RootPath:         rootPath,
+		DistanceProvider: distancer,
+	}, config, store)
+
+	require.Nil(t, err)
+	require.Equal(t, index.dims, int32(3))
+
+	err = index.Add(2, []float32{1, 2, 3, 4})
+	require.NotNil(t, err)
+	require.ErrorContains(t, err, "insert called with a vector of the wrong size")
 }
