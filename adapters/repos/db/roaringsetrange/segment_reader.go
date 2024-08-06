@@ -69,6 +69,20 @@ func (r *SegmentReader) firstLayer() (roaringset.BitmapLayer, bool) {
 		}, false
 	}
 
+	// additions := layer.Additions
+	// if additions == nil {
+	// 	additions = sroar.NewBitmap()
+	// }
+	// deletions := layer.Deletions
+	// if deletions == nil {
+	// 	deletions = sroar.NewBitmap()
+	// }
+
+	// return roaringset.BitmapLayer{
+	// 	Additions: additions,
+	// 	Deletions: deletions,
+	// }, !additions.IsEmpty()
+
 	var deletions *sroar.Bitmap
 	if layer.Deletions == nil {
 		deletions = sroar.NewBitmap()
@@ -248,6 +262,9 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+
+		_ = bit
+		_ = layer
 
 		if value&(1<<(bit-1)) != 0 {
 			if !ANDed {
