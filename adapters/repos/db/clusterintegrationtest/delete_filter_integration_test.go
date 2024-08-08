@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/dto"
 	"github.com/weaviate/weaviate/entities/filters"
 	"github.com/weaviate/weaviate/entities/models"
@@ -58,7 +59,7 @@ func Test_FilterSearchesOnDeletedDocIDsWithLimits(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -67,7 +68,7 @@ func Test_FilterSearchesOnDeletedDocIDsWithLimits(t *testing.T) {
 	require.Nil(t, err)
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 	defer repo.Shutdown(testCtx())
 
 	t.Run("creating the thing class", func(t *testing.T) {
@@ -175,7 +176,7 @@ func TestLimitOneAfterDeletion(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -185,7 +186,7 @@ func TestLimitOneAfterDeletion(t *testing.T) {
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(testCtx())
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the class", func(t *testing.T) {
 		require.Nil(t,

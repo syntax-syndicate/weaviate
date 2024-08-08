@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/aggregation"
 	"github.com/weaviate/weaviate/entities/filters"
 	"github.com/weaviate/weaviate/entities/models"
@@ -40,7 +41,7 @@ func Test_Aggregations(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: shardState,
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -49,7 +50,7 @@ func Test_Aggregations(t *testing.T) {
 	require.Nil(t, err)
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("prepare test schema and data ",
 		prepareCompanyTestSchemaAndData(repo, migrator, schemaGetter))
@@ -85,7 +86,7 @@ func Test_Aggregations_MultiShard(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: shardState,
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -94,7 +95,7 @@ func Test_Aggregations_MultiShard(t *testing.T) {
 	require.Nil(t, err)
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("prepare test schema and data ",
 		prepareCompanyTestSchemaAndData(repo, migrator, schemaGetter))
@@ -121,8 +122,8 @@ func Test_Aggregations_MultiShard(t *testing.T) {
 		cleanupCompanyTestSchemaAndData(repo, migrator))
 }
 
-func prepareCompanyTestSchemaAndData(repo *DB,
-	migrator *Migrator, schemaGetter *fakeSchemaGetter,
+func prepareCompanyTestSchemaAndData(repo *db.DB,
+	migrator *db.Migrator, schemaGetter *fakeSchemaGetter,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		schema := schema.Schema{
@@ -229,15 +230,15 @@ func prepareCompanyTestSchemaAndData(repo *DB,
 	}
 }
 
-func cleanupCompanyTestSchemaAndData(repo *DB,
-	migrator *Migrator,
+func cleanupCompanyTestSchemaAndData(repo *db.DB,
+	migrator *db.Migrator,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		assert.Nil(t, repo.Shutdown(context.Background()))
 	}
 }
 
-func testNumericalAggregationsWithGrouping(repo *DB, exact bool) func(t *testing.T) {
+func testNumericalAggregationsWithGrouping(repo *db.DB, exact bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		epsilon := 0.1
 		if !exact {
@@ -1212,7 +1213,7 @@ func testNumericalAggregationsWithGrouping(repo *DB, exact bool) func(t *testing
 	}
 }
 
-func testDateAggregationsWithFilters(repo *DB) func(t *testing.T) {
+func testDateAggregationsWithFilters(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("Aggregations with filter that matches nothing", func(t *testing.T) {
 			params := aggregation.Params{
@@ -1249,7 +1250,7 @@ func testDateAggregationsWithFilters(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testNumericalAggregationsWithFilters(repo *DB) func(t *testing.T) {
+func testNumericalAggregationsWithFilters(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("Aggregations with filter that matches nothing", func(t *testing.T) {
 			params := aggregation.Params{
@@ -1286,7 +1287,7 @@ func testNumericalAggregationsWithFilters(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testNumericalAggregationsWithoutGrouping(repo *DB,
+func testNumericalAggregationsWithoutGrouping(repo *db.DB,
 	exact bool,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
@@ -2090,7 +2091,7 @@ func testNumericalAggregationsWithoutGrouping(repo *DB,
 	}
 }
 
-func testDateAggregationsWithGrouping(repo *DB, exact bool) func(t *testing.T) {
+func testDateAggregationsWithGrouping(repo *db.DB, exact bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("group on only unique values", func(t *testing.T) {
 			params := aggregation.Params{
@@ -2225,7 +2226,7 @@ func testDateAggregationsWithGrouping(repo *DB, exact bool) func(t *testing.T) {
 	}
 }
 
-func testDateAggregationsWithoutGrouping(repo *DB, exact bool) func(t *testing.T) {
+func testDateAggregationsWithoutGrouping(repo *db.DB, exact bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("without grouping", func(t *testing.T) {
 			params := aggregation.Params{

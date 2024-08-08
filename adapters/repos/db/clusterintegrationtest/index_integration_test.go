@@ -12,7 +12,7 @@
 //go:build integrationTest
 // +build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"

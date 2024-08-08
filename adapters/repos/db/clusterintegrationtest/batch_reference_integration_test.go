@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/dto"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -41,7 +42,7 @@ func Test_AddingReferencesInBatches(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -53,7 +54,7 @@ func Test_AddingReferencesInBatches(t *testing.T) {
 
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	s := schema.Schema{
 		Objects: &models.Schema{

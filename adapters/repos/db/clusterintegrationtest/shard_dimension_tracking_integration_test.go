@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/entities/schema"
 	enthnsw "github.com/weaviate/weaviate/entities/vectorindex/hnsw"
@@ -46,7 +47,7 @@ func Benchmark_Migration(b *testing.B) {
 				schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 				shardState: shardState,
 			}
-			repo, err := New(logger, Config{
+			repo, err := db.New(logger, db.Config{
 				RootPath:                  dirName,
 				QueryMaximumResults:       1000,
 				MaxImportGoroutinesFactor: 1,
@@ -57,7 +58,7 @@ func Benchmark_Migration(b *testing.B) {
 			require.Nil(b, repo.WaitForStartup(testCtx()))
 			defer repo.Shutdown(context.Background())
 
-			migrator := NewMigrator(repo, logger)
+			migrator := db.NewMigrator(repo, logger)
 
 			class := &models.Class{
 				Class:               "Test",
@@ -111,7 +112,7 @@ func Test_Migration(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: shardState,
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		RootPath:                  dirName,
 		QueryMaximumResults:       1000,
 		MaxImportGoroutinesFactor: 1,
@@ -122,7 +123,7 @@ func Test_Migration(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("set schema", func(t *testing.T) {
 		class := &models.Class{
@@ -179,7 +180,7 @@ func Test_DimensionTracking(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: shardState,
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
 		MaxImportGoroutinesFactor: 1,
@@ -190,7 +191,7 @@ func Test_DimensionTracking(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("set schema", func(t *testing.T) {
 		class := &models.Class{
@@ -246,7 +247,7 @@ func Test_DimensionTracking(t *testing.T) {
 
 	t.Run("verify dimensions after initial import", func(t *testing.T) {
 		idx := repo.GetIndex("Test")
-		idx.ForEachShard(func(name string, shard ShardLike) error {
+		idx.ForEachShard(func(name string, shard db.ShardLike) error {
 			assert.Equal(t, 12800, shard.Dimensions(context.Background()))
 			assert.Equal(t, 6400, shard.QuantizedDimensions(context.Background(), 64))
 			return nil
@@ -269,7 +270,7 @@ func Test_DimensionTracking(t *testing.T) {
 
 	t.Run("verify dimensions after delete", func(t *testing.T) {
 		idx := repo.GetIndex("Test")
-		idx.ForEachShard(func(name string, shard ShardLike) error {
+		idx.ForEachShard(func(name string, shard db.ShardLike) error {
 			assert.Equal(t, 11520, shard.Dimensions(context.Background()))
 			assert.Equal(t, 5760, shard.QuantizedDimensions(context.Background(), 64))
 			return nil
@@ -318,7 +319,7 @@ func Test_DimensionTracking(t *testing.T) {
 
 	t.Run("verify dimensions after first set of updates", func(t *testing.T) {
 		idx := repo.GetIndex("Test")
-		idx.ForEachShard(func(name string, shard ShardLike) error {
+		idx.ForEachShard(func(name string, shard db.ShardLike) error {
 			assert.Equal(t, 6400, shard.Dimensions(context.Background()))
 			assert.Equal(t, 3200, shard.QuantizedDimensions(context.Background(), 64))
 			assert.Equal(t, 1600, shard.QuantizedDimensions(context.Background(), 32))
@@ -368,7 +369,7 @@ func Test_DimensionTracking(t *testing.T) {
 
 	t.Run("verify dimensions after more updates", func(t *testing.T) {
 		idx := repo.GetIndex("Test")
-		idx.ForEachShard(func(name string, shard ShardLike) error {
+		idx.ForEachShard(func(name string, shard db.ShardLike) error {
 			assert.Equal(t, 12800, shard.Dimensions(context.Background()))
 			assert.Equal(t, 6400, shard.QuantizedDimensions(context.Background(), 64))
 			assert.Equal(t, 12800, shard.QuantizedDimensions(context.Background(), 0))
@@ -377,13 +378,13 @@ func Test_DimensionTracking(t *testing.T) {
 	})
 }
 
-func publishDimensionMetricsFromRepo(ctx context.Context, repo *DB, className string) {
+func publishDimensionMetricsFromRepo(ctx context.Context, repo *db.DB, className string) {
 	if !repo.config.TrackVectorDimensions {
 		log.Printf("Vector dimensions tracking is disabled, returning 0")
 		return
 	}
 	index := repo.GetIndex(schema.ClassName(className))
-	index.ForEachShard(func(name string, shard ShardLike) error {
+	index.ForEachShard(func(name string, shard db.ShardLike) error {
 		shard.publishDimensionMetrics(ctx)
 		return nil
 	})
@@ -415,7 +416,7 @@ func Test_DimensionTrackingMetrics(t *testing.T) {
 		shardState: shardState,
 	}
 	metrics := monitoring.GetMetrics()
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
 		MaxImportGoroutinesFactor: 1,
@@ -426,7 +427,7 @@ func Test_DimensionTrackingMetrics(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("set schema type=HNSW", func(t *testing.T) {
 		class := &models.Class{

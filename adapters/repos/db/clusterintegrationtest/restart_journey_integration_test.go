@@ -12,7 +12,7 @@
 //go:build integrationTest
 // +build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/dto"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -50,7 +51,7 @@ func TestRestartJourney(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: shardState,
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -59,7 +60,7 @@ func TestRestartJourney(t *testing.T) {
 	require.Nil(t, err)
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", func(t *testing.T) {
 		require.Nil(t,
@@ -161,12 +162,12 @@ func TestRestartJourney(t *testing.T) {
 		})
 	})
 
-	var newRepo *DB
+	var newRepo *db.DB
 	t.Run("shutdown and recreate", func(t *testing.T) {
 		require.Nil(t, repo.Shutdown(context.Background()))
 		repo = nil
 
-		newRepo, err = New(logger, Config{
+		newRepo, err = db.New(logger, db.Config{
 			MemtablesFlushDirtyAfter:  60,
 			RootPath:                  dirName,
 			QueryMaximumResults:       10000,

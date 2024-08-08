@@ -12,7 +12,7 @@
 //go:build integrationTest
 // +build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/adapters/repos/db/lsmkv"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/models"
@@ -297,7 +298,7 @@ func TestShard_DebugResetVectorIndex_WithTargetVectors(t *testing.T) {
 		hnsw.UserConfig{},
 		false,
 		true,
-		func(i *Index) {
+		func(i *db.Index) {
 			i.vectorIndexUserConfigs = make(map[string]schemaConfig.VectorIndexConfig)
 			i.vectorIndexUserConfigs["foo"] = hnsw.UserConfig{}
 		},

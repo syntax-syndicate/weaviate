@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dbb "github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/entities/schema"
 	"github.com/weaviate/weaviate/entities/storobj"
@@ -253,14 +254,15 @@ func TestBackup_BucketLevel(t *testing.T) {
 	})
 }
 
-func setupTestDB(t *testing.T, rootDir string, classes ...*models.Class) *DB {
+func setupTestDB(t *testing.T, rootDir string, classes ...*models.Class) *dbb.DB {
 	logger, _ := test.NewNullLogger()
 
 	schemaGetter := &fakeSchemaGetter{
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	db, err := New(logger, Config{
+
+	db, err := dbb.New(logger, dbb.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  rootDir,
 		QueryMaximumResults:       10,
@@ -269,7 +271,7 @@ func setupTestDB(t *testing.T, rootDir string, classes ...*models.Class) *DB {
 	require.Nil(t, err)
 	db.SetSchemaGetter(schemaGetter)
 	require.Nil(t, db.WaitForStartup(testCtx()))
-	migrator := NewMigrator(db, logger)
+	migrator := dbb.NewMigrator(db, logger)
 
 	for _, class := range classes {
 		require.Nil(t,

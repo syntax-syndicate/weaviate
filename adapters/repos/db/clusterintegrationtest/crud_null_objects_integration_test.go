@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/dto"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -141,14 +142,14 @@ func TestNullArrayClass(t *testing.T) {
 	}
 }
 
-func createRepo(t *testing.T) (*Migrator, *DB, *fakeSchemaGetter) {
+func createRepo(t *testing.T) (*db.Migrator, *db.DB, *fakeSchemaGetter) {
 	schemaGetter := &fakeSchemaGetter{
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
 	logger, _ := test.NewNullLogger()
 	dirName := t.TempDir()
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10,
@@ -157,7 +158,7 @@ func createRepo(t *testing.T) (*Migrator, *DB, *fakeSchemaGetter) {
 	require.Nil(t, err)
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
-	return NewMigrator(repo, logger), repo, schemaGetter
+	return db.NewMigrator(repo, logger), repo, schemaGetter
 }
 
 func createClassWithEverything(IndexNullState bool, IndexPropertyLength bool) *models.Class {

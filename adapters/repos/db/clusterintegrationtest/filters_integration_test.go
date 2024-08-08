@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/dto"
 	"github.com/weaviate/weaviate/entities/filters"
 	"github.com/weaviate/weaviate/entities/models"
@@ -40,7 +41,7 @@ func TestFilters(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -51,7 +52,7 @@ func TestFilters(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(testCtx())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 	t.Run("prepare test schema and data ", prepareCarTestSchemaAndData(repo, migrator, schemaGetter))
 
 	t.Run("primitive props without nesting", testPrimitiveProps(repo))
@@ -71,7 +72,7 @@ func TestFiltersNoLengthIndex(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -81,7 +82,7 @@ func TestFiltersNoLengthIndex(t *testing.T) {
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(testCtx())
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 	t.Run("prepare test schema and data ", prepareCarTestSchemaAndDataNoLength(repo, migrator, schemaGetter))
 	t.Run("primitive props without nesting", testPrimitivePropsWithNoLengthIndex(repo))
 }
@@ -108,8 +109,8 @@ var (
 	dtGeoCoordinates = schema.DataTypeGeoCoordinates
 )
 
-func prepareCarTestSchemaAndData(repo *DB,
-	migrator *Migrator, schemaGetter *fakeSchemaGetter,
+func prepareCarTestSchemaAndData(repo *db.DB,
+	migrator *db.Migrator, schemaGetter *fakeSchemaGetter,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("creating the class", func(t *testing.T) {
@@ -131,8 +132,8 @@ func prepareCarTestSchemaAndData(repo *DB,
 	}
 }
 
-func prepareCarTestSchemaAndDataNoLength(repo *DB,
-	migrator *Migrator, schemaGetter *fakeSchemaGetter,
+func prepareCarTestSchemaAndDataNoLength(repo *db.DB,
+	migrator *db.Migrator, schemaGetter *fakeSchemaGetter,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("creating the class", func(t *testing.T) {
@@ -154,7 +155,7 @@ func prepareCarTestSchemaAndDataNoLength(repo *DB,
 	}
 }
 
-func testPrimitivePropsWithNoLengthIndex(repo *DB) func(t *testing.T) {
+func testPrimitivePropsWithNoLengthIndex(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		type test struct {
 			name        string
@@ -215,7 +216,7 @@ func testPrimitivePropsWithNoLengthIndex(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testPrimitiveProps(repo *DB) func(t *testing.T) {
+func testPrimitiveProps(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		type test struct {
 			name        string
@@ -600,7 +601,7 @@ func testPrimitiveProps(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testPrimitivePropsWithLimit(repo *DB) func(t *testing.T) {
+func testPrimitivePropsWithLimit(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("greater than", func(t *testing.T) {
 			limit := 1
@@ -632,8 +633,8 @@ func testPrimitivePropsWithLimit(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testChainedPrimitiveProps(repo *DB,
-	migrator *Migrator,
+func testChainedPrimitiveProps(repo *db.DB,
+	migrator *db.Migrator,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
 		type test struct {
@@ -1032,7 +1033,7 @@ func TestGeoPropUpdateJourney(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -1043,7 +1044,7 @@ func TestGeoPropUpdateJourney(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("import schema", func(t *testing.T) {
 		class := &models.Class{
@@ -1140,7 +1141,7 @@ func TestCasingOfOperatorCombinations(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -1151,7 +1152,7 @@ func TestCasingOfOperatorCombinations(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	class := &models.Class{
 		Class:               "FilterCasingBug",
@@ -1361,7 +1362,7 @@ func TestCasingOfOperatorCombinations(t *testing.T) {
 	})
 }
 
-func testSortProperties(repo *DB) func(t *testing.T) {
+func testSortProperties(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		type test struct {
 			name        string
@@ -1543,7 +1544,7 @@ func TestFilteringAfterDeletion(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -1554,7 +1555,7 @@ func TestFilteringAfterDeletion(t *testing.T) {
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 	class := &models.Class{
 		Class:               "DeletionClass",
 		VectorIndexConfig:   enthnsw.NewDefaultUserConfig(),

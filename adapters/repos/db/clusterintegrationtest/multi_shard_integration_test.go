@@ -12,10 +12,11 @@
 //go:build integrationTest
 // +build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -28,6 +29,7 @@ import (
 	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/distancer"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/dto"
@@ -41,6 +43,7 @@ import (
 	"github.com/weaviate/weaviate/entities/verbosity"
 	"github.com/weaviate/weaviate/usecases/objects"
 	"github.com/weaviate/weaviate/usecases/sharding"
+	shardingConfig "github.com/weaviate/weaviate/usecases/sharding/config"
 )
 
 func Test_MultiShardJourneys_IndividualImports(t *testing.T) {
@@ -272,11 +275,11 @@ func Test_MultiShardJourneys_BM25_Search(t *testing.T) {
 	})
 }
 
-func setupMultiShardTest(t *testing.T) (*DB, *logrus.Logger) {
+func setupMultiShardTest(t *testing.T) (*db.DB, *logrus.Logger) {
 	dirName := t.TempDir()
 
 	logger, _ := test.NewNullLogger()
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		ServerVersion:             "server-version",
 		GitHash:                   "git-hash",
 		MemtablesFlushDirtyAfter:  60,
@@ -288,14 +291,31 @@ func setupMultiShardTest(t *testing.T) (*DB, *logrus.Logger) {
 	return repo, logger
 }
 
-func makeTestMultiShardSchema(repo *DB, logger logrus.FieldLogger, fixedShardState bool, classes ...*models.Class) func(t *testing.T) {
+func makeTestMultiShardSchema(repo *db.DB, logger logrus.FieldLogger, fixedShardState bool, classes ...*models.Class) func(t *testing.T) {
 	return func(t *testing.T) {
 		var shardState *sharding.State
 		if fixedShardState {
 			shardState = fixedMultiShardState()
 		} else {
-			shardState = multiShardState()
+			f := func() *sharding.State {
+				config, err := shardingConfig.ParseConfig(map[string]interface{}{
+					"desiredCount": json.Number("3"),
+				}, 1)
+				if err != nil {
+					panic(err)
+				}
+
+				s, err := sharding.InitState("multi-shard-test-index", config,
+					fakeNodes{[]string{"node1"}}, 1, false)
+				if err != nil {
+					panic(err)
+				}
+
+				return s
+			}
+			shardState = f()
 		}
+
 		schemaGetter := &fakeSchemaGetter{
 			schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 			shardState: shardState,
@@ -303,7 +323,7 @@ func makeTestMultiShardSchema(repo *DB, logger logrus.FieldLogger, fixedShardSta
 		repo.SetSchemaGetter(schemaGetter)
 		err := repo.WaitForStartup(testCtx())
 		require.Nil(t, err)
-		migrator := NewMigrator(repo, logger)
+		migrator := db.NewMigrator(repo, logger)
 
 		t.Run("creating the class", func(t *testing.T) {
 			for _, class := range classes {
@@ -320,7 +340,7 @@ func makeTestMultiShardSchema(repo *DB, logger logrus.FieldLogger, fixedShardSta
 	}
 }
 
-func makeTestRetrievingBaseClass(repo *DB, data []*models.Object,
+func makeTestRetrievingBaseClass(repo *db.DB, data []*models.Object,
 	queryVec []float32, groundTruth []*models.Object,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
@@ -453,7 +473,7 @@ func makeTestRetrievingBaseClass(repo *DB, data []*models.Object,
 	}
 }
 
-func makeTestRetrieveRefClass(repo *DB, data, refData []*models.Object) func(t *testing.T) {
+func makeTestRetrieveRefClass(repo *db.DB, data, refData []*models.Object) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("retrieve ref data individually with select props", func(t *testing.T) {
 			for _, desired := range refData {
@@ -482,7 +502,7 @@ func makeTestRetrieveRefClass(repo *DB, data, refData []*models.Object) func(t *
 	}
 }
 
-func makeTestSortingClass(repo *DB) func(t *testing.T) {
+func makeTestSortingClass(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("sort by property", func(t *testing.T) {
 			getIndex := func(res search.Result) float64 {
@@ -642,7 +662,7 @@ func makeTestSortingClass(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testNodesAPI(repo *DB) func(t *testing.T) {
+func testNodesAPI(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		nodeStatues, err := repo.GetNodeStatus(context.Background(), "", verbosity.OutputVerbose)
 		require.Nil(t, err)
@@ -677,7 +697,7 @@ func testNodesAPI(repo *DB) func(t *testing.T) {
 	}
 }
 
-func makeTestBatchDeleteAllObjects(repo *DB) func(t *testing.T) {
+func makeTestBatchDeleteAllObjects(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		performDelete := func(t *testing.T, className string) {
 			getParams := func(className string, dryRun bool) objects.BatchDeleteParams {

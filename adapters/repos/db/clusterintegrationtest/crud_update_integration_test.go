@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/adapters/repos/db/inverted"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/dto"
@@ -46,7 +47,7 @@ func TestUpdateJourney(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -56,7 +57,7 @@ func TestUpdateJourney(t *testing.T) {
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	schema := libschema.Schema{
 		Objects: &models.Schema{
@@ -292,7 +293,7 @@ func TestUpdateJourney(t *testing.T) {
 		assert.Equal(t, float64(0), mean)
 
 		logger := logrus.New()
-		migrator := NewMigrator(repo, logger)
+		migrator := db.NewMigrator(repo, logger)
 		migrator.RecountProperties(context.Background())
 
 		sum, count, mean, err = tracker.PropertyTally("name")
@@ -377,10 +378,10 @@ func extractPropValues(in search.Results, propName string) []interface{} {
 	return out
 }
 
-func getTracker(repo *DB, className string) *inverted.JsonShardMetaData {
+func getTracker(repo *db.DB, className string) *inverted.JsonShardMetaData {
 	index := repo.GetIndex("UpdateTestClass")
-	var shard ShardLike
-	index.ForEachShard(func(name string, shardv ShardLike) error {
+	var shard db.ShardLike
+	index.ForEachShard(func(name string, shardv db.ShardLike) error {
 		shard = shardv
 		return nil
 	})

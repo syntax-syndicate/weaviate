@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -23,6 +23,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/entities/schema"
@@ -122,7 +123,7 @@ func TestNestedReferences(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		MaxImportGoroutinesFactor: 1,
@@ -131,7 +132,7 @@ func TestNestedReferences(t *testing.T) {
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("adding all classes to the schema", func(t *testing.T) {
 		for _, class := range refSchema.Objects.Classes {
@@ -509,28 +510,28 @@ func partiallyNestedSelectProperties() search.SelectProperties {
 	}
 }
 
-func GetDimensionsFromRepo(ctx context.Context, repo *DB, className string) int {
+func GetDimensionsFromRepo(ctx context.Context, repo *db.DB, className string) int {
 	if !repo.config.TrackVectorDimensions {
 		log.Printf("Vector dimensions tracking is disabled, returning 0")
 		return 0
 	}
 	index := repo.GetIndex(schema.ClassName(className))
 	sum := 0
-	index.ForEachShard(func(name string, shard ShardLike) error {
+	index.ForEachShard(func(name string, shard db.ShardLike) error {
 		sum += shard.Dimensions(ctx)
 		return nil
 	})
 	return sum
 }
 
-func GetQuantizedDimensionsFromRepo(ctx context.Context, repo *DB, className string, segments int) int {
+func GetQuantizedDimensionsFromRepo(ctx context.Context, repo *db.DB, className string, segments int) int {
 	if !repo.config.TrackVectorDimensions {
 		log.Printf("Vector dimensions tracking is disabled, returning 0")
 		return 0
 	}
 	index := repo.GetIndex(schema.ClassName(className))
 	sum := 0
-	index.ForEachShard(func(name string, shard ShardLike) error {
+	index.ForEachShard(func(name string, shard db.ShardLike) error {
 		sum += shard.QuantizedDimensions(ctx, segments)
 		return nil
 	})
@@ -579,7 +580,7 @@ func Test_AddingReferenceOneByOne(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		MaxImportGoroutinesFactor: 1,
@@ -589,7 +590,7 @@ func Test_AddingReferenceOneByOne(t *testing.T) {
 	repo.SetSchemaGetter(schemaGetter)
 	require.Nil(t, repo.WaitForStartup(testCtx()))
 	defer repo.Shutdown(context.Background())
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("add required classes", func(t *testing.T) {
 		for _, class := range sch.Objects.Classes {

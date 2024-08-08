@@ -11,7 +11,7 @@
 
 //go:build integrationTest
 
-package db
+package clusterintegrationtest
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/distancer"
 	"github.com/weaviate/weaviate/entities/dto"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -45,7 +46,7 @@ func TestBatchPutObjectsWithDimensions(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -59,7 +60,7 @@ func TestBatchPutObjectsWithDimensions(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator, schemaGetter))
 
@@ -80,7 +81,7 @@ func TestBatchPutObjects(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -94,7 +95,7 @@ func TestBatchPutObjects(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator, schemaGetter))
 
@@ -110,7 +111,7 @@ func TestBatchPutObjectsNoVectorsWithDimensions(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -124,7 +125,7 @@ func TestBatchPutObjectsNoVectorsWithDimensions(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator,
 		schemaGetter))
@@ -146,7 +147,7 @@ func TestBatchPutObjectsNoVectors(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -159,7 +160,7 @@ func TestBatchPutObjectsNoVectors(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator, schemaGetter))
 
@@ -175,7 +176,7 @@ func TestBatchDeleteObjectsWithDimensions(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  1,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -189,7 +190,7 @@ func TestBatchDeleteObjectsWithDimensions(t *testing.T) {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
 
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the test class", testAddBatchObjectClass(repo, migrator, schemaGetter))
 
@@ -207,7 +208,7 @@ func TestBatchDeleteObjectsWithDimensions(t *testing.T) {
 	require.Equal(t, 303, dimFinal, "2 objects have been deleted")
 }
 
-func delete2Objects(t *testing.T, repo *DB, className string) {
+func delete2Objects(t *testing.T, repo *db.DB, className string) {
 	batchDeleteRes, err := repo.BatchDeleteObjects(context.Background(), objects.BatchDeleteParams{
 		ClassName: "ThingForBatching",
 		Filters: &filters.LocalFilter{
@@ -254,7 +255,7 @@ func TestBatchDeleteObjects(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       10000,
@@ -267,7 +268,7 @@ func TestBatchDeleteObjects(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator, schemaGetter))
 
@@ -285,7 +286,7 @@ func TestBatchDeleteObjects_JourneyWithDimensions(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       queryMaximumResults,
@@ -298,7 +299,7 @@ func TestBatchDeleteObjects_JourneyWithDimensions(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator, schemaGetter))
 
@@ -325,7 +326,7 @@ func TestBatchDeleteObjects_Journey(t *testing.T) {
 		schema:     schema.Schema{Objects: &models.Schema{Classes: nil}},
 		shardState: singleShardState(),
 	}
-	repo, err := New(logger, Config{
+	repo, err := db.New(logger, db.Config{
 		MemtablesFlushDirtyAfter:  60,
 		RootPath:                  dirName,
 		QueryMaximumResults:       queryMaximumResults,
@@ -337,7 +338,7 @@ func TestBatchDeleteObjects_Journey(t *testing.T) {
 	defer func() {
 		require.Nil(t, repo.Shutdown(context.Background()))
 	}()
-	migrator := NewMigrator(repo, logger)
+	migrator := db.NewMigrator(repo, logger)
 
 	t.Run("creating the thing class", testAddBatchObjectClass(repo, migrator,
 		schemaGetter))
@@ -345,7 +346,7 @@ func TestBatchDeleteObjects_Journey(t *testing.T) {
 	t.Run("batch delete journey things", testBatchDeleteObjectsJourney(repo, queryMaximumResults))
 }
 
-func testAddBatchObjectClass(repo *DB, migrator *Migrator,
+func testAddBatchObjectClass(repo *db.DB, migrator *db.Migrator,
 	schemaGetter *fakeSchemaGetter,
 ) func(t *testing.T) {
 	return func(t *testing.T) {
@@ -374,7 +375,7 @@ func testAddBatchObjectClass(repo *DB, migrator *Migrator,
 	}
 }
 
-func testBatchImportObjectsNoVector(repo *DB) func(t *testing.T) {
+func testBatchImportObjectsNoVector(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("with a prior validation error, but nothing to cause errors in the db", func(t *testing.T) {
 			batch := objects.BatchObjects{
@@ -435,7 +436,7 @@ func testBatchImportObjectsNoVector(repo *DB) func(t *testing.T) {
 	}
 }
 
-func simpleInsertObjects(t *testing.T, repo *DB, class string, count int) {
+func simpleInsertObjects(t *testing.T, repo *db.DB, class string, count int) {
 	batch := make(objects.BatchObjects, count)
 	for i := 0; i < count; i++ {
 		batch[i] = objects.BatchObject{
@@ -456,7 +457,7 @@ func simpleInsertObjects(t *testing.T, repo *DB, class string, count int) {
 	repo.BatchPutObjects(context.Background(), batch, nil, 0)
 }
 
-func testBatchImportObjects(repo *DB) func(t *testing.T) {
+func testBatchImportObjects(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		t.Run("with a prior validation error, but nothing to cause errors in the db", func(t *testing.T) {
 			batch := objects.BatchObjects{
@@ -819,7 +820,7 @@ func testBatchImportObjects(repo *DB) func(t *testing.T) {
 // geo props are the first props with property specific indices, so making sure
 // that they work with batches at scale adds value beyond the regular batch
 // import tests
-func testBatchImportGeoObjects(repo *DB) func(t *testing.T) {
+func testBatchImportGeoObjects(repo *db.DB) func(t *testing.T) {
 	r := getRandomSeed()
 	return func(t *testing.T) {
 		size := 500
@@ -979,7 +980,7 @@ func testBatchImportGeoObjects(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testBatchDeleteObjects(repo *DB) func(t *testing.T) {
+func testBatchDeleteObjects(repo *db.DB) func(t *testing.T) {
 	return func(t *testing.T) {
 		getParams := func(dryRun bool, output string) objects.BatchDeleteParams {
 			return objects.BatchDeleteParams{
@@ -1117,7 +1118,7 @@ func testBatchDeleteObjects(repo *DB) func(t *testing.T) {
 	}
 }
 
-func testBatchDeleteObjectsJourney(repo *DB, queryMaximumResults int64) func(t *testing.T) {
+func testBatchDeleteObjectsJourney(repo *db.DB, queryMaximumResults int64) func(t *testing.T) {
 	return func(t *testing.T) {
 		getParams := func(dryRun bool, output string) objects.BatchDeleteParams {
 			return objects.BatchDeleteParams{
