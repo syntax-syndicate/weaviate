@@ -25,32 +25,43 @@ func (index *flat) getMetadataFile() string {
 	return fmt.Sprintf("%s.db", metadataPrefix)
 }
 
-func (f *flat) initDimensions() {
-	dims, err := f.fetchDimensions()
+func (index *flat) initMetadata() error {
+
+	path := filepath.Join(index.rootPath, index.getMetadataFile())
+	var err error
+	index.metadata, err = bolt.Open(path, 0600, nil)
 	if err != nil {
-		f.logger.Warnf("could not fetch dimensions: %v", err)
+		return errors.Wrapf(err, "open %q", path)
 	}
+	dims, err := index.fetchDimensions()
+	if err != nil {
+		return errors.Wrap(err, "fetch dimensions")
+	}
+	defer func() {
+		if err != nil {
+			index.metadata.Close()
+			index.metadata = nil
+		}
+	}()
 	if dims == 0 {
-		dims = f.calculateDimensions()
+		dims = index.calculateDimensions()
 	}
 	if dims > 0 {
-		f.trackDimensionsOnce.Do(func() {
-			atomic.StoreInt32(&f.dims, dims)
+		index.trackDimensionsOnce.Do(func() {
+			atomic.StoreInt32(&index.dims, dims)
 		})
 	}
+	return nil
 }
 
-func (f *flat) fetchDimensions() (int32, error) {
-	path := filepath.Join(f.rootPath, f.getMetadataFile())
+func (index *flat) fetchDimensions() (int32, error) {
 
-	db, err := bolt.Open(path, 0600, nil)
-	if err != nil {
-		return 0, errors.Wrapf(err, "open %q", path)
+	if index.metadata == nil {
+		return 0, nil
 	}
-	defer db.Close()
 
 	var dimensions int32 = 0
-	err = db.View(func(tx *bolt.Tx) error {
+	err := index.metadata.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(vectorMetadataBucket))
 		if b == nil {
 			return nil
@@ -93,19 +104,15 @@ func (index *flat) calculateDimensions() int32 {
 	return 0
 }
 
-func (f *flat) setDimensions(dimensions int32) error {
-	path := filepath.Join(f.rootPath, f.getMetadataFile())
-
-	db, err := bolt.Open(path, 0600, nil)
-	if err != nil {
-		return errors.Wrapf(err, "open %q", path)
+func (index *flat) setDimensions(dimensions int32) error {
+	if index.metadata == nil {
+		return nil
 	}
-	defer db.Close()
 
-	err = db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(vectorMetadataBucket))
-		if err != nil {
-			return errors.Wrap(err, "create bucket")
+	err := index.metadata.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(vectorMetadataBucket))
+		if b == nil {
+			return errors.New("no flat metadata bucket")
 		}
 		buf := make([]byte, 4)
 		binary.LittleEndian.PutUint32(buf, uint32(dimensions))

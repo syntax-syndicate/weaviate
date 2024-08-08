@@ -91,6 +91,7 @@ func run(dirName string, logger *logrus.Logger, compression string, vectorCache 
 	if err != nil {
 		return 0, 0, err
 	}
+	defer index.Shutdown(context.Background())
 
 	if concurrentCacheReads != 0 {
 		index.concurrentCacheReads = concurrentCacheReads
