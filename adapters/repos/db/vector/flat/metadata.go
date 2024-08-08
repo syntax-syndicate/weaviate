@@ -2,6 +2,7 @@ package flat
 
 import (
 	"encoding/binary"
+	"fmt"
 	"path/filepath"
 	"sync/atomic"
 
@@ -9,9 +10,20 @@ import (
 	"github.com/pkg/errors"
 )
 
-const metadataFile = "flat.db"
+const (
+	metadataPrefix       = "meta"
+	vectorMetadataBucket = "vector"
+)
 
-var dimensionBucket = []byte("dimensions")
+func (index *flat) getMetadataFile() string {
+	if index.targetVector != "" {
+		// This may be redundant as target vector is already validated in the schema
+		cleanTarget := filepath.Clean(index.targetVector)
+		cleanTarget = filepath.Base(cleanTarget)
+		return fmt.Sprintf("%s_%s.db", metadataPrefix, cleanTarget)
+	}
+	return fmt.Sprintf("%s.db", metadataPrefix)
+}
 
 func (f *flat) initDimensions() {
 	dims, err := f.fetchDimensions()
@@ -29,7 +41,7 @@ func (f *flat) initDimensions() {
 }
 
 func (f *flat) fetchDimensions() (int32, error) {
-	path := filepath.Join(f.rootPath, metadataFile)
+	path := filepath.Join(f.rootPath, f.getMetadataFile())
 
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
@@ -39,13 +51,13 @@ func (f *flat) fetchDimensions() (int32, error) {
 
 	var dimensions int32 = 0
 	err = db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket(dimensionBucket)
+		b := tx.Bucket([]byte(vectorMetadataBucket))
 		if b == nil {
-			return nil // Bucket doesn't exist, return default value (0)
+			return nil
 		}
-		v := b.Get([]byte("value"))
+		v := b.Get([]byte("dimensions"))
 		if v == nil {
-			return nil // Key doesn't exist, return default value (0)
+			return nil
 		}
 		dimensions = int32(binary.LittleEndian.Uint32(v))
 		return nil
@@ -82,7 +94,7 @@ func (index *flat) calculateDimensions() int32 {
 }
 
 func (f *flat) setDimensions(dimensions int32) error {
-	path := filepath.Join(f.rootPath, metadataFile)
+	path := filepath.Join(f.rootPath, f.getMetadataFile())
 
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
@@ -91,13 +103,13 @@ func (f *flat) setDimensions(dimensions int32) error {
 	defer db.Close()
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(dimensionBucket)
+		b, err := tx.CreateBucketIfNotExists([]byte(vectorMetadataBucket))
 		if err != nil {
 			return errors.Wrap(err, "create bucket")
 		}
 		buf := make([]byte, 4)
 		binary.LittleEndian.PutUint32(buf, uint32(dimensions))
-		return b.Put([]byte("value"), buf)
+		return b.Put([]byte("dimensions"), buf)
 	})
 	if err != nil {
 		return errors.Wrap(err, "set dimensions")
