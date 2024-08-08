@@ -279,7 +279,7 @@ func (s *schema) addProperty(class string, v uint64, props ...*models.Property) 
 	return meta.AddProperty(v, props...)
 }
 
-func (s *schema) addTenants(class string, v uint64, req *command.AddTenantsRequest) error {
+func (s *schema) AddTenants(class string, v uint64, req *command.AddTenantsRequest) error {
 	req.Tenants = removeNilTenants(req.Tenants)
 
 	if ok, meta, info, err := s.multiTenancyEnabled(class); !ok {
