@@ -46,7 +46,7 @@ func TestVersionedSchemaReaderShardReplicas(t *testing.T) {
 	// shard not found
 	ss := &sharding.State{Physical: make(map[string]sharding.Physical)}
 
-	sc.addClass(&models.Class{Class: "C"}, ss, 1)
+	sc.AddClass(&models.Class{Class: "C"}, ss, 1)
 
 	_, err = vsc.ShardReplicas(ctx, "C", "S", 1)
 	assert.ErrorIs(t, err, ErrShardNotFound)
@@ -102,7 +102,7 @@ func TestVersionedSchemaReaderClass(t *testing.T) {
 		"S2": {Status: "A", BelongsToNodes: nodes},
 	}}
 
-	assert.Nil(t, sc.schema.addClass(cls1, ss1, 1))
+	assert.Nil(t, sc.schema.AddClass(cls1, ss1, 1))
 	info, err = sc.ClassInfo(ctx, "C", 1)
 	assert.Equal(t, ClassInfo{
 		ReplicationFactor: 1,
@@ -136,7 +136,7 @@ func TestVersionedSchemaReaderClass(t *testing.T) {
 		PartitioningEnabled: true,
 		Physical:            map[string]sharding.Physical{"S1": {Status: "A", BelongsToNodes: nodes}},
 	}
-	sc.schema.addClass(cls2, ss2, 1)
+	sc.schema.AddClass(cls2, ss2, 1)
 	cls, err = sc.ReadOnlyClass(ctx, "D", 1)
 	assert.Equal(t, cls, cls2, 1)
 	assert.Nil(t, err)
@@ -179,7 +179,7 @@ func TestSchemaReaderShardReplicas(t *testing.T) {
 	// shard not found
 	ss := &sharding.State{Physical: make(map[string]sharding.Physical)}
 
-	sc.addClass(&models.Class{Class: "C"}, ss, 1)
+	sc.AddClass(&models.Class{Class: "C"}, ss, 1)
 
 	_, err = rsc.ShardReplicas("C", "S")
 	assert.ErrorIs(t, err, ErrShardNotFound)
@@ -222,7 +222,7 @@ func TestSchemaReaderClass(t *testing.T) {
 		"S2": {Status: "A", BelongsToNodes: nodes},
 	}}
 
-	sc.schema.addClass(cls1, ss1, 1)
+	sc.schema.AddClass(cls1, ss1, 1)
 	assert.Equal(t, sc.ReadOnlyClass("C"), cls1)
 	assert.Equal(t, sc.MultiTenancy("D"), models.MultiTenancyConfig{})
 	assert.Nil(t, sc.Read("C", func(c *models.Class, s *sharding.State) error { return nil }))
@@ -245,7 +245,7 @@ func TestSchemaReaderClass(t *testing.T) {
 		PartitioningEnabled: true,
 		Physical:            map[string]sharding.Physical{"S1": {Status: "A", BelongsToNodes: nodes}},
 	}
-	sc.schema.addClass(cls2, ss2, 1)
+	sc.schema.AddClass(cls2, ss2, 1)
 	assert.Equal(t, sc.ReadOnlyClass("D"), cls2)
 	assert.Equal(t, sc.MultiTenancy("D"), models.MultiTenancyConfig{Enabled: true})
 
@@ -278,7 +278,7 @@ func TestSchemaSnapshot(t *testing.T) {
 		}
 	)
 	ss.SetLocalName(node)
-	assert.Nil(t, sc.addClass(cls, ss, 1))
+	assert.Nil(t, sc.AddClass(cls, ss, 1))
 	parser.On("ParseClass", mock.Anything).Return(nil)
 
 	// Create Snapshot

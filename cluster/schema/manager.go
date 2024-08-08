@@ -144,7 +144,7 @@ func (s *SchemaManager) AddClass(cmd *command.ApplyRequest, nodeID string, schem
 	return s.apply(
 		applyOp{
 			op:                    cmd.GetType().String(),
-			updateSchema:          func() error { return s.schema.addClass(req.Class, req.State, cmd.Version) },
+			updateSchema:          func() error { return s.schema.AddClass(req.Class, req.State, cmd.Version) },
 			updateStore:           func() error { return s.db.AddClass(req) },
 			schemaOnly:            schemaOnly,
 			triggerSchemaCallback: true,
@@ -174,7 +174,7 @@ func (s *SchemaManager) RestoreClass(cmd *command.ApplyRequest, nodeID string, s
 	return s.apply(
 		applyOp{
 			op:                    cmd.GetType().String(),
-			updateSchema:          func() error { return s.schema.addClass(req.Class, req.State, cmd.Version) },
+			updateSchema:          func() error { return s.schema.AddClass(req.Class, req.State, cmd.Version) },
 			updateStore:           func() error { return s.db.AddClass(req) },
 			schemaOnly:            schemaOnly,
 			triggerSchemaCallback: true,

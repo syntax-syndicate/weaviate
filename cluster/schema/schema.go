@@ -238,7 +238,7 @@ func (s *schema) multiTenancyEnabled(class string) (bool, *metaClass, ClassInfo,
 	return true, meta, info, nil
 }
 
-func (s *schema) addClass(cls *models.Class, ss *sharding.State, v uint64) error {
+func (s *schema) AddClass(cls *models.Class, ss *sharding.State, v uint64) error {
 	s.Lock()
 	defer s.Unlock()
 	_, exists := s.Classes[cls.Class]
