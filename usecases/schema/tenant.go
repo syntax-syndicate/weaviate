@@ -48,12 +48,12 @@ func (h *Handler) AddTenants(ctx context.Context,
 		return 0, err
 	}
 
-	validated, err := validateTenants(tenants, true)
+	validated, err := ValidateTenants(tenants, true)
 	if err != nil {
 		return 0, err
 	}
 
-	if err = h.validateActivityStatuses(validated, true, false); err != nil {
+	if err = h.ValidateActivityStatuses(validated, true, false); err != nil {
 		return 0, err
 	}
 
@@ -71,7 +71,7 @@ func (h *Handler) AddTenants(ctx context.Context,
 	return h.schemaManager.AddTenants(class, &request)
 }
 
-func validateTenants(tenants []*models.Tenant, allowOverHundred bool) (validated []*models.Tenant, err error) {
+func ValidateTenants(tenants []*models.Tenant, allowOverHundred bool) (validated []*models.Tenant, err error) {
 	if !allowOverHundred && len(tenants) > 100 {
 		err = uco.NewErrInvalidUserInput(ErrMsgMaxAllowedTenants)
 		return
@@ -105,7 +105,7 @@ func validateTenants(tenants []*models.Tenant, allowOverHundred bool) (validated
 	return
 }
 
-func (h *Handler) validateActivityStatuses(tenants []*models.Tenant,
+func (h *Handler) ValidateActivityStatuses(tenants []*models.Tenant,
 	allowEmpty, allowFrozen bool,
 ) error {
 	msgs := make([]string, 0, len(tenants))
@@ -153,11 +153,11 @@ func (h *Handler) UpdateTenants(ctx context.Context, principal *models.Principal
 		"tenants": tenants,
 	}).Debug("update tenants status")
 
-	validated, err := validateTenants(tenants, false)
+	validated, err := ValidateTenants(tenants, false)
 	if err != nil {
 		return nil, err
 	}
-	if err := h.validateActivityStatuses(validated, false, true); err != nil {
+	if err := h.ValidateActivityStatuses(validated, false, true); err != nil {
 		return nil, err
 	}
 
