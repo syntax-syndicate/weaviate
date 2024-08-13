@@ -167,10 +167,13 @@ type Store struct {
 	// schemaManager is responsible for applying changes committed by RAFT to the schema representation & querying the
 	// schema
 	schemaManager *schema.SchemaManager
-	// lastAppliedIndexOnStart represents the index of the last applied command when the store is opened.
-	lastAppliedIndexOnStart atomic.Uint64
-	// lastAppliedIndex index of latest update to the store
-	lastAppliedIndex atomic.Uint64
+	// lastAppliedIndexToDB represents the index of the last applied command when the store is opened.
+	lastAppliedIndexToDB atomic.Uint64
+
+	// // lastAppliedIndexOnStart represents the index of the last applied command when the store is opened.
+	// lastAppliedIndexOnStart atomic.Uint64
+	// // lastAppliedIndex index of latest update to the store
+	// lastAppliedIndex atomic.Uint64
 }
 
 func NewFSM(cfg Config) Store {
@@ -192,6 +195,22 @@ func NewFSM(cfg Config) Store {
 func (st *Store) IsVoter() bool { return st.cfg.Voter }
 func (st *Store) ID() string    { return st.cfg.NodeID }
 
+// lastIndex returns the last index in stable storage,
+// either from the last log or from the last snapshot.
+// this method work as a protection from applying anything was applied to the db
+// by checking either raft or max(snapshot, log store) instead the db will catchup
+func (st *Store) lastIndex() uint64 {
+	if st.raft != nil {
+		return st.raft.LastIndex()
+	}
+
+	l, err := st.LastAppliedCommand()
+	if err != nil {
+		panic(fmt.Sprintf("read log last command: %s", err.Error()))
+	}
+	return max(lastSnapshotIndex(st.snapshotStore), l)
+}
+
 // Open opens this store and marked as such.
 // It constructs a new Raft node using the provided configuration.
 // If there is any old state, such as snapshots, logs, peers, etc., all of those will be restored.
@@ -200,20 +219,14 @@ func (st *Store) Open(ctx context.Context) (err error) {
 		return nil
 	}
 	defer func() { st.open.Store(err == nil) }()
-
 	if err := st.init(); err != nil {
 		return fmt.Errorf("initialize raft store: %w", err)
 	}
 
-	l, err := st.LastAppliedCommand()
-	if err != nil {
-		return fmt.Errorf("read log last command: %w", err)
-	}
-	st.lastAppliedIndexOnStart.Store(l)
+	st.lastAppliedIndexToDB.Store(st.lastIndex())
 
 	// we have to open the DB before constructing new raft in case of restore calls
 	st.openDatabase(ctx)
-
 	st.log.WithFields(logrus.Fields{
 		"name":                 st.cfg.NodeID,
 		"metadata_only_voters": st.cfg.MetadataOnlyVoters,
@@ -224,18 +237,15 @@ func (st *Store) Open(ctx context.Context) (err error) {
 	}
 
 	snapIndex := lastSnapshotIndex(st.snapshotStore)
-	if st.lastAppliedIndexOnStart.Load() == 0 && snapIndex == 0 {
+	if st.lastAppliedIndexToDB.Load() == 0 && snapIndex == 0 {
 		// if empty node report ready
 		st.dbLoaded.Store(true)
 	}
 
-	st.lastAppliedIndex.Store(st.raft.AppliedIndex())
-
 	st.log.WithFields(logrus.Fields{
 		"raft_applied_index":                st.raft.AppliedIndex(),
 		"raft_last_index":                   st.raft.LastIndex(),
-		"last_store_applied_index_on_start": st.lastAppliedIndexOnStart.Load(),
-		"last_store_raft_applied_index":     st.lastAppliedIndex.Load(),
+		"last_store_applied_index_on_start": st.lastAppliedIndexToDB.Load(),
 		"last_snapshot_index":               snapIndex,
 	}).Info("raft node constructed")
 
@@ -245,6 +255,57 @@ func (st *Store) Open(ctx context.Context) (err error) {
 	enterrors.GoWrapper(f, st.log)
 	return nil
 }
+
+// func (st *Store) Open(ctx context.Context) (err error) {
+// 	if st.open.Load() { // store already opened
+// 		return nil
+// 	}
+// 	defer func() { st.open.Store(err == nil) }()
+
+// 	if err := st.init(); err != nil {
+// 		return fmt.Errorf("initialize raft store: %w", err)
+// 	}
+
+// 	l, err := st.LastAppliedCommand()
+// 	if err != nil {
+// 		return fmt.Errorf("read log last command: %w", err)
+// 	}
+// 	st.lastAppliedIndexOnStart.Store(l)
+
+// 	// we have to open the DB before constructing new raft in case of restore calls
+// 	st.openDatabase(ctx)
+
+// 	st.log.WithFields(logrus.Fields{
+// 		"name":                 st.cfg.NodeID,
+// 		"metadata_only_voters": st.cfg.MetadataOnlyVoters,
+// 	}).Info("construct a new raft node")
+// 	st.raft, err = raft.NewRaft(st.raftConfig(), st, st.logCache, st.logStore, st.snapshotStore, st.raftTransport)
+// 	if err != nil {
+// 		return fmt.Errorf("raft.NewRaft %v %w", st.raftTransport.LocalAddr(), err)
+// 	}
+
+// 	snapIndex := lastSnapshotIndex(st.snapshotStore)
+// 	if st.lastAppliedIndexOnStart.Load() == 0 && snapIndex == 0 {
+// 		// if empty node report ready
+// 		st.dbLoaded.Store(true)
+// 	}
+
+// 	st.lastAppliedIndex.Store(st.raft.AppliedIndex())
+
+// 	st.log.WithFields(logrus.Fields{
+// 		"raft_applied_index":                st.raft.AppliedIndex(),
+// 		"raft_last_index":                   st.raft.LastIndex(),
+// 		"last_store_applied_index_on_start": st.lastAppliedIndexOnStart.Load(),
+// 		"last_store_raft_applied_index":     st.lastAppliedIndex.Load(),
+// 		"last_snapshot_index":               snapIndex,
+// 	}).Info("raft node constructed")
+
+// 	// There's no hard limit on the migration, so it should take as long as necessary.
+// 	// However, we believe that 1 day should be more than sufficient.
+// 	f := func() { st.onLeaderFound(time.Hour * 24) }
+// 	enterrors.GoWrapper(f, st.log)
+// 	return nil
+// }
 
 func (st *Store) init() error {
 	var err error
@@ -418,7 +479,8 @@ func (st *Store) WaitToRestoreDB(ctx context.Context, period time.Duration, clos
 
 // WaitForAppliedIndex waits until the update with the given version is propagated to this follower node
 func (st *Store) WaitForAppliedIndex(ctx context.Context, period time.Duration, version uint64) error {
-	if idx := st.lastAppliedIndex.Load(); idx >= version {
+	// if idx := st.lastAppliedIndex.Load(); idx >= version {
+	if idx := st.lastIndex(); idx >= version {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, st.cfg.ConsistencyWaitTimeout)
@@ -431,7 +493,8 @@ func (st *Store) WaitForAppliedIndex(ctx context.Context, period time.Duration, 
 		case <-ctx.Done():
 			return fmt.Errorf("%w: version got=%d  want=%d", types.ErrDeadlineExceeded, idx, version)
 		case <-ticker.C:
-			if idx = st.lastAppliedIndex.Load(); idx >= version {
+			// if idx = st.lastAppliedIndex.Load(); idx >= version {
+			if idx = st.lastIndex(); idx >= version {
 				return nil
 			} else {
 				st.log.WithFields(logrus.Fields{
@@ -503,8 +566,10 @@ func (st *Store) Stats() map[string]any {
 	stats["open"] = st.open.Load()
 	stats["bootstrapped"] = st.bootstrapped.Load()
 	stats["candidates"] = st.candidates
-	stats["last_store_log_applied_index"] = st.lastAppliedIndexOnStart.Load()
-	stats["last_applied_index"] = st.lastAppliedIndex.Load()
+	stats["last_store_log_applied_index"] = st.lastAppliedIndexToDB.Load()
+	stats["last_applied_index"] = st.lastIndex()
+	// stats["last_store_log_applied_index"] = st.lastAppliedIndexOnStart.Load()
+	// stats["last_applied_index"] = st.lastAppliedIndex.Load()
 	stats["db_loaded"] = st.dbLoaded.Load()
 
 	// If the raft stats exist, add them as a nested map
@@ -602,25 +667,25 @@ func (st *Store) openDatabase(ctx context.Context) {
 //
 // In specific scenarios where the follower's state is too far behind the leader's log,
 // the leader may decide to send a snapshot. Consequently, the follower must update its state accordingly.
-func (st *Store) reloadDBFromSnapshot() (success bool) {
-	defer func() {
-		if success && !st.cfg.MetadataOnlyVoters {
-			st.reloadDBFromSchema()
-		}
-	}()
+// func (st *Store) reloadDBFromSnapshot() (success bool) {
+// 	defer func() {
+// 		if success && !st.cfg.MetadataOnlyVoters {
+// 			st.reloadDBFromSchema()
+// 		}
+// 	}()
 
-	if !st.dbLoaded.CompareAndSwap(true, false) {
-		// the snapshot already includes the state from the raft log
-		snapIndex := lastSnapshotIndex(st.snapshotStore)
-		st.log.WithFields(logrus.Fields{
-			"last_applied_index":           st.lastAppliedIndex.Load(),
-			"last_store_log_applied_index": st.lastAppliedIndexOnStart.Load(),
-			"last_snapshot_index":          snapIndex,
-		}).Info("load local db from snapshot")
-		return st.lastAppliedIndexOnStart.Load() <= snapIndex
-	}
-	return true
-}
+// 	if !st.dbLoaded.CompareAndSwap(true, false) {
+// 		// the snapshot already includes the state from the raft log
+// 		snapIndex := lastSnapshotIndex(st.snapshotStore)
+// 		st.log.WithFields(logrus.Fields{
+// 			"last_applied_index":           st.lastAppliedIndex.Load(),
+// 			"last_store_log_applied_index": st.lastAppliedIndexOnStart.Load(),
+// 			"last_snapshot_index":          snapIndex,
+// 		}).Info("load local db from snapshot")
+// 		return st.lastAppliedIndexOnStart.Load() <= snapIndex
+// 	}
+// 	return true
+// }
 
 func (st *Store) reloadDBFromSchema() {
 	if !st.cfg.MetadataOnlyVoters {
@@ -629,8 +694,31 @@ func (st *Store) reloadDBFromSchema() {
 		st.log.Info("skipping reload DB from schema as the node is metadata only")
 	}
 	st.dbLoaded.Store(true)
-	st.lastAppliedIndexOnStart.Store(0)
+
+	// in this path it means it was called from Apply()
+	// or forced Restore()
+	if st.raft != nil {
+		st.lastAppliedIndexToDB.Store(st.raft.LastIndex())
+		return
+	}
+
+	// restore requests from snapshots before init new RAFT node
+	lastLogApplied, err := st.LastAppliedCommand()
+	if err != nil {
+		st.log.WithField("error", err).Warn("can't detect the last applied command, setting the lastLogApplied to 0")
+	}
+	st.lastAppliedIndexToDB.Store(max(lastSnapshotIndex(st.snapshotStore), lastLogApplied))
 }
+
+// func (st *Store) reloadDBFromSchema() {
+// 	if !st.cfg.MetadataOnlyVoters {
+// 		st.schemaManager.ReloadDBFromSchema()
+// 	} else {
+// 		st.log.Info("skipping reload DB from schema as the node is metadata only")
+// 	}
+// 	st.dbLoaded.Store(true)
+// 	st.lastAppliedIndexOnStart.Store(0)
+// }
 
 type Response struct {
 	Error   error
