@@ -55,41 +55,41 @@ func (s *Searcher) docBitmap(ctx context.Context, b *lsmkv.Bucket, limit int,
 		// }
 		// return dbm_cursor, err_cursor
 
-		// t_reader := time.Now()
-		// dbm_reader, err_reader := s.docBitmapInvertedRoaringSetRange_Reader(ctx, b, pv)
-		// if err_reader == nil {
-		// 	fmt.Printf("  ==> search reader took [%s] op [%s] card [%d] size [%d]\n",
-		// 		time.Since(t_reader).String(), pv.operator.Name(),
-		// 		dbm_reader.docIDs.GetCardinality(), len(dbm_reader.docIDs.ToBuffer()))
-		// }
-		// return dbm_reader, err_reader
-
-		// t3 := time.Now()
-		// dbm3, err3 := s.docBitmapInvertedRoaringSetRange3(ctx, b, pv)
-		// if err3 == nil {
-		// 	fmt.Printf("  ==> search took [%s] op [%s] card [%d] size [%d]\n",
-		// 		time.Since(t3).String(), pv.operator.Name(),
-		// 		dbm3.docIDs.GetCardinality(), len(dbm3.docIDs.ToBuffer()))
-		// }
-		// return dbm3, err3
-
-		// t_cursor_bs := time.Now()
-		// dbm_cursor_bs, err_cursor_bs := s.docBitmapInvertedRoaringSetRange_Cursor_BitSet(ctx, b, pv)
-		// if err_cursor_bs == nil {
-		// 	fmt.Printf("  ==> search took [%s] op [%s] card [%d] size [%d]\n",
-		// 		time.Since(t_cursor_bs).String(), pv.operator.Name(),
-		// 		dbm_cursor_bs.docIDs.GetCardinality(), len(dbm_cursor_bs.docIDs.ToBuffer()))
-		// }
-		// return dbm_cursor_bs, err_cursor_bs
-
-		t_reader_bs := time.Now()
-		dbm_reader_bs, err_reader_bs := s.docBitmapInvertedRoaringSetRange_Reader_BitSet(ctx, b, pv)
-		if err_reader_bs == nil {
-			fmt.Printf("  ==> search reader bitset took [%s] op [%s] card [%d] size [%d]\n",
-				time.Since(t_reader_bs).String(), pv.operator.Name(),
-				dbm_reader_bs.docIDs.GetCardinality(), len(dbm_reader_bs.docIDs.ToBuffer()))
+		t_reader := time.Now()
+		dbm_reader, err_reader := s.docBitmapInvertedRoaringSetRange_Reader(ctx, b, pv)
+		if err_reader == nil {
+			fmt.Printf("  ==> search reader took [%s] op [%s] card [%d] size [%d]\n",
+				time.Since(t_reader).String(), pv.operator.Name(),
+				dbm_reader.docIDs.GetCardinality(), len(dbm_reader.docIDs.ToBuffer()))
 		}
-		return dbm_reader_bs, err_reader_bs
+		return dbm_reader, err_reader
+
+		// // t3 := time.Now()
+		// // dbm3, err3 := s.docBitmapInvertedRoaringSetRange3(ctx, b, pv)
+		// // if err3 == nil {
+		// // 	fmt.Printf("  ==> search took [%s] op [%s] card [%d] size [%d]\n",
+		// // 		time.Since(t3).String(), pv.operator.Name(),
+		// // 		dbm3.docIDs.GetCardinality(), len(dbm3.docIDs.ToBuffer()))
+		// // }
+		// // return dbm3, err3
+
+		// // t_cursor_bs := time.Now()
+		// // dbm_cursor_bs, err_cursor_bs := s.docBitmapInvertedRoaringSetRange_Cursor_BitSet(ctx, b, pv)
+		// // if err_cursor_bs == nil {
+		// // 	fmt.Printf("  ==> search took [%s] op [%s] card [%d] size [%d]\n",
+		// // 		time.Since(t_cursor_bs).String(), pv.operator.Name(),
+		// // 		dbm_cursor_bs.docIDs.GetCardinality(), len(dbm_cursor_bs.docIDs.ToBuffer()))
+		// // }
+		// // return dbm_cursor_bs, err_cursor_bs
+
+		// t_reader_bs := time.Now()
+		// dbm_reader_bs, err_reader_bs := s.docBitmapInvertedRoaringSetRange_Reader_BitSet(ctx, b, pv)
+		// if err_reader_bs == nil {
+		// 	fmt.Printf("  ==> search reader bitset took [%s] op [%s] card [%d] size [%d]\n",
+		// 		time.Since(t_reader_bs).String(), pv.operator.Name(),
+		// 		dbm_reader_bs.docIDs.GetCardinality(), len(dbm_reader_bs.docIDs.ToBuffer()))
+		// }
+		// return dbm_reader_bs, err_reader_bs
 
 	case lsmkv.StrategyMapCollection:
 		return s.docBitmapInvertedMap(ctx, b, limit, pv)
