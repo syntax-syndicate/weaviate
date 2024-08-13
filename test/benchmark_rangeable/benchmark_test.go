@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/edsrzf/mmap-go"
 	"github.com/weaviate/weaviate/adapters/repos/db/lsmkv/segmentindex"
 	"github.com/weaviate/weaviate/adapters/repos/db/roaringsetrange"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -59,7 +60,7 @@ func BenchmarkMergeSegmentsSequencePread(b *testing.B) {
 
 // go test -v -bench BenchmarkMergeSegmentsParallelPread -benchmem -run ^$ github.com/weaviate/weaviate/test/benchmark_rangeable
 func BenchmarkMergeSegmentsParallelPread(b *testing.B) {
-	conc := 8
+	conc := 4
 
 	eg := new(errgroup.Group)
 	eg.SetLimit(conc)
@@ -96,6 +97,65 @@ func merge_segment_pread(path string) {
 
 	reader := io.NewSectionReader(file, segmentindex.HeaderSize, fileInfo.Size())
 	segmentCursor := roaringsetrange.NewSegmentCursorReader(reader)
+	gaplessSegmentCursor := roaringsetrange.NewGaplessSegmentCursor(segmentCursor)
+	segmentReader := roaringsetrange.NewSegmentReader(gaplessSegmentCursor)
+
+	val := uint64(13891384759934908577)
+	segmentReader.Read(context.Background(), val, filters.OperatorGreaterThan)
+}
+
+// go test -v -bench BenchmarkMergeSegmentsSequenceMmap -benchmem -run ^$ github.com/weaviate/weaviate/test/benchmark_rangeable
+func BenchmarkMergeSegmentsSequenceMmap(b *testing.B) {
+	total := time.Now()
+	for i := 0; i < len(segments); i++ {
+		single := time.Now()
+		path := filepath.Join(dirLsm, segments[i])
+		merge_segment_mmap(path)
+		fmt.Printf("merging segment [%s] took [%s]\n\n", path, time.Since(single))
+	}
+	fmt.Printf("merging all segment took [%s]\n\n", time.Since(total))
+}
+
+// go test -v -bench BenchmarkMergeSegmentsParallelMmap -benchmem -run ^$ github.com/weaviate/weaviate/test/benchmark_rangeable
+func BenchmarkMergeSegmentsParallelMmap(b *testing.B) {
+	conc := 4
+
+	eg := new(errgroup.Group)
+	eg.SetLimit(conc)
+
+	total := time.Now()
+	for i := 0; i < len(segments); i++ {
+		i := i
+		eg.Go(func() error {
+			single := time.Now()
+			path := filepath.Join(dirLsm, segments[i])
+			merge_segment_mmap(path)
+			fmt.Printf("merging segment [%s] took [%s]\n\n", path, time.Since(single))
+
+			return nil
+		})
+
+	}
+	eg.Wait()
+
+	fmt.Printf("merging all segment took [%s]\n\n", time.Since(total))
+}
+
+func merge_segment_mmap(path string) {
+	file, err := os.Open(path)
+	if err != nil {
+		log.Fatalf("open file: %s", err)
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		log.Fatalf("stat file: %s", err)
+	}
+
+	contents, _ := mmap.MapRegion(file, int(fileInfo.Size()), mmap.RDONLY, 0, 0)
+
+	segmentCursor := roaringsetrange.NewSegmentCursor(contents[segmentindex.HeaderSize:])
 	gaplessSegmentCursor := roaringsetrange.NewGaplessSegmentCursor(segmentCursor)
 	segmentReader := roaringsetrange.NewSegmentReader(gaplessSegmentCursor)
 
