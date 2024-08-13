@@ -19,8 +19,7 @@ import (
 )
 
 func (s *segment) newRoaringSetRangeReader() *roaringsetrange.SegmentReader {
-	sectionReader := io.NewSectionReader(s.contentFile, segmentindex.HeaderSize, s.size)
-	segmentCursor := roaringsetrange.NewSegmentCursorReader(sectionReader)
+	segmentCursor := roaringsetrange.NewSegmentCursor(s.contents[s.dataStartPos:s.dataEndPos])
 
 	// fmt.Printf("analysis started [%s]\n", s.path)
 
