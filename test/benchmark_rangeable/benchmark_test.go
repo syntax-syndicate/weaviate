@@ -59,7 +59,7 @@ func BenchmarkMergeSegmentsSequencePread(b *testing.B) {
 
 // go test -v -bench BenchmarkMergeSegmentsParallelPread -benchmem -run ^$ github.com/weaviate/weaviate/test/benchmark_rangeable
 func BenchmarkMergeSegmentsParallelPread(b *testing.B) {
-	conc := 8
+	conc := 4
 
 	eg := new(errgroup.Group)
 	eg.SetLimit(conc)
