@@ -129,7 +129,7 @@ func (s *SchemaManager) Close(ctx context.Context) (err error) {
 	return s.db.Close(ctx)
 }
 
-func (s *SchemaManager) AddClassApply(req command.AddClassRequest, nodeID string, schemaOnly bool, reqVersion uint64) error {
+func (s *SchemaManager) AddClassApply(req *command.AddClassRequest, nodeID string, schemaOnly bool, reqVersion uint64) error {
 	if req.State == nil {
 		return fmt.Errorf("%w: nil sharding state", ErrBadRequest)
 	}
@@ -153,7 +153,7 @@ func (s *SchemaManager) AddClass(cmd *command.ApplyRequest, nodeID string, schem
 	if err := json.Unmarshal(cmd.SubCommand, &req); err != nil {
 		return fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
-	return s.AddClassApply(req, nodeID, schemaOnly, cmd.Version)
+	return s.AddClassApply(&req, nodeID, schemaOnly, cmd.Version)
 }
 
 func (s *SchemaManager) RestoreClass(cmd *command.ApplyRequest, nodeID string, schemaOnly bool) error {
@@ -288,20 +288,23 @@ func (s *SchemaManager) UpdateShardStatus(cmd *command.ApplyRequest, schemaOnly 
 	)
 }
 
+func (s *SchemaManager) AddTenantsApply(cmd *command.AddTenantsRequest, schemaOnly bool, class string, v uint64) error {
+	return s.apply(
+		applyOp{
+			op:           command.ApplyRequest_TYPE_ADD_TENANT.String(),
+			updateSchema: func() error { return s.schema.AddTenants(class, v, &cmd) },
+			updateStore:  func() error { return s.db.AddTenants(class, &cmd) },
+			schemaOnly:   schemaOnly,
+		},
+	)
+}
+
 func (s *SchemaManager) AddTenants(cmd *command.ApplyRequest, schemaOnly bool) error {
 	req := &command.AddTenantsRequest{}
 	if err := gproto.Unmarshal(cmd.SubCommand, req); err != nil {
 		return fmt.Errorf("%w: %w", ErrBadRequest, err)
 	}
-
-	return s.apply(
-		applyOp{
-			op:           cmd.GetType().String(),
-			updateSchema: func() error { return s.schema.AddTenants(cmd.Class, cmd.Version, req) },
-			updateStore:  func() error { return s.db.AddTenants(cmd.Class, req) },
-			schemaOnly:   schemaOnly,
-		},
-	)
+	return s.AddTenantsApply(req, schemaOnly, cmd.Class, cmd.Version)
 }
 
 func (s *SchemaManager) UpdateTenants(cmd *command.ApplyRequest, schemaOnly bool) (n int, err error) {
