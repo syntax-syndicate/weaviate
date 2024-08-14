@@ -141,7 +141,7 @@ func (s *SchemaManager) AddClassApply(req *command.AddClassRequest, nodeID strin
 		applyOp{
 			op:                    command.ApplyRequest_TYPE_ADD_CLASS.String(),
 			updateSchema:          func() error { return s.schema.AddClass(req.Class, req.State, reqVersion) },
-			updateStore:           func() error { return s.db.AddClass(req) },
+			updateStore:           func() error { return s.db.AddClass(*req) },
 			schemaOnly:            schemaOnly,
 			triggerSchemaCallback: true,
 		},
@@ -292,8 +292,8 @@ func (s *SchemaManager) AddTenantsApply(cmd *command.AddTenantsRequest, schemaOn
 	return s.apply(
 		applyOp{
 			op:           command.ApplyRequest_TYPE_ADD_TENANT.String(),
-			updateSchema: func() error { return s.schema.AddTenants(class, v, &cmd) },
-			updateStore:  func() error { return s.db.AddTenants(class, &cmd) },
+			updateSchema: func() error { return s.schema.AddTenants(class, v, cmd) },
+			updateStore:  func() error { return s.db.AddTenants(class, cmd) },
 			schemaOnly:   schemaOnly,
 		},
 	)
