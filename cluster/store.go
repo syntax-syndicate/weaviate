@@ -169,6 +169,8 @@ type Store struct {
 	schemaManager *schema.SchemaManager
 	// lastAppliedIndexToDB represents the index of the last applied command when the store is opened.
 	lastAppliedIndexToDB atomic.Uint64
+
+	reloadOnce sync.Once
 }
 
 func NewFSM(cfg Config) Store {
@@ -624,7 +626,7 @@ func (st *Store) reloadDBFromSchema() {
 	// in this path it means it was called from Apply()
 	// or forced Restore()
 	if st.raft != nil {
-		st.lastAppliedIndexToDB.Store(st.raft.LastIndex())
+		st.lastAppliedIndexToDB.Store(st.raft.AppliedIndex())
 		return
 	}
 
