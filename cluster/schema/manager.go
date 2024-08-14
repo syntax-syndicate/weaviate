@@ -129,11 +129,7 @@ func (s *SchemaManager) Close(ctx context.Context) (err error) {
 	return s.db.Close(ctx)
 }
 
-func (s *SchemaManager) AddClass(cmd *command.ApplyRequest, nodeID string, schemaOnly bool) error {
-	req := command.AddClassRequest{}
-	if err := json.Unmarshal(cmd.SubCommand, &req); err != nil {
-		return fmt.Errorf("%w: %w", ErrBadRequest, err)
-	}
+func (s *SchemaManager) AddClassApply(req command.AddClassRequest, nodeID string, schemaOnly bool, reqVersion uint64) error {
 	if req.State == nil {
 		return fmt.Errorf("%w: nil sharding state", ErrBadRequest)
 	}
@@ -143,13 +139,21 @@ func (s *SchemaManager) AddClass(cmd *command.ApplyRequest, nodeID string, schem
 	req.State.SetLocalName(nodeID)
 	return s.apply(
 		applyOp{
-			op:                    cmd.GetType().String(),
-			updateSchema:          func() error { return s.schema.AddClass(req.Class, req.State, cmd.Version) },
+			op:                    command.ApplyRequest_TYPE_ADD_CLASS.String(),
+			updateSchema:          func() error { return s.schema.AddClass(req.Class, req.State, reqVersion) },
 			updateStore:           func() error { return s.db.AddClass(req) },
 			schemaOnly:            schemaOnly,
 			triggerSchemaCallback: true,
 		},
 	)
+}
+
+func (s *SchemaManager) AddClass(cmd *command.ApplyRequest, nodeID string, schemaOnly bool) error {
+	req := command.AddClassRequest{}
+	if err := json.Unmarshal(cmd.SubCommand, &req); err != nil {
+		return fmt.Errorf("%w: %w", ErrBadRequest, err)
+	}
+	return s.AddClassApply(req, nodeID, schemaOnly, cmd.Version)
 }
 
 func (s *SchemaManager) RestoreClass(cmd *command.ApplyRequest, nodeID string, schemaOnly bool) error {
