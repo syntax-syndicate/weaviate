@@ -114,6 +114,9 @@ type SegmentCursorReader struct {
 	reader     *bufio.Reader
 	lenBuf     []byte
 	dataBuf    []byte
+
+	bufs [][]byte
+	pos  int
 }
 
 // NewSegmentCursor creates a cursor for a single disk segment. Make sure that
@@ -130,7 +133,22 @@ func NewSegmentCursorReader(readSeeker io.ReadSeeker) *SegmentCursorReader {
 		reader:     bufio.NewReaderSize(readSeeker, 10*1024*1024),
 		lenBuf:     make([]byte, 8),
 		dataBuf:    make([]byte, 0),
+
+		bufs: make([][]byte, 2),
+		pos:  0,
 	}
+}
+
+func (c *SegmentCursorReader) buf(l int) []byte {
+	p := c.pos
+	c.pos = (c.pos + 1) % len(c.bufs)
+
+	if cap(c.bufs[p]) < l {
+		fmt.Printf("  ==> extending data buf from [%d] to [%d]\n", cap(c.bufs[p]), l)
+		c.bufs[p] = make([]byte, l)
+		return c.bufs[p]
+	}
+	return c.bufs[p][:l]
 }
 
 func (c *SegmentCursorReader) First() (uint8, roaringset.BitmapLayer, bool) {
@@ -157,17 +175,20 @@ func (c *SegmentCursorReader) Next() (uint8, roaringset.BitmapLayer, bool) {
 
 	// TODO pool
 	nodeLen := binary.LittleEndian.Uint64(c.lenBuf)
-	if uint64(cap(c.dataBuf)) < nodeLen {
-		fmt.Printf("  ==> extending data buf from [%d] tp [%d]\n", cap(c.dataBuf), nodeLen)
-		c.dataBuf = make([]byte, nodeLen)
-	} else {
-		c.dataBuf = c.dataBuf[:nodeLen]
-	}
+	// if uint64(cap(c.dataBuf)) < nodeLen {
+	// 	fmt.Printf("  ==> extending data buf from [%d] to [%d]\n", cap(c.dataBuf), nodeLen)
+	// 	c.dataBuf = make([]byte, nodeLen)
+	// } else {
+	// 	c.dataBuf = c.dataBuf[:nodeLen]
+	// }
+	buf := c.buf(int(nodeLen))
 
-	copy(c.dataBuf, c.lenBuf)
+	// copy(c.dataBuf, c.lenBuf)
+	copy(buf, c.lenBuf)
 
 	// TODO
-	n2, err2 := io.ReadFull(c.reader, c.dataBuf[8:])
+	// n2, err2 := io.ReadFull(c.reader, c.dataBuf[8:])
+	n2, err2 := io.ReadFull(c.reader, buf[8:])
 	if err2 != nil {
 		panic(fmt.Sprintf("SegmentCursorReader::Next2: %s", err2.Error()))
 	}
@@ -175,7 +196,8 @@ func (c *SegmentCursorReader) Next() (uint8, roaringset.BitmapLayer, bool) {
 		panic(fmt.Sprintf("SegmentCursorReader::Next2: invalid bytes read [%d] instead [%d]", n2, nodeLen-8))
 	}
 
-	sn := NewSegmentNodeFromBuffer(c.dataBuf)
+	// sn := NewSegmentNodeFromBuffer(c.dataBuf)
+	sn := NewSegmentNodeFromBuffer(buf)
 	// c.nextOffset += sn.Len()
 
 	return sn.Key(), roaringset.BitmapLayer{
@@ -183,3 +205,48 @@ func (c *SegmentCursorReader) Next() (uint8, roaringset.BitmapLayer, bool) {
 		Deletions: sn.Deletions(),
 	}, true
 }
+
+// func (c *SegmentCursorReader) Next() (uint8, roaringset.BitmapLayer, bool) {
+// 	// TODO pool
+// 	n, err := io.ReadFull(c.reader, c.lenBuf)
+
+// 	if err == io.EOF {
+// 		return 0, roaringset.BitmapLayer{}, false
+// 	}
+
+// 	// TODO
+// 	if err != nil {
+// 		panic(fmt.Sprintf("SegmentCursorReader::Next: %s", err.Error()))
+// 	}
+// 	if n != 8 {
+// 		panic(fmt.Sprintf("SegmentCursorReader::Next: invalid bytes read [%d] instead [%d]", n, 8))
+// 	}
+
+// 	// TODO pool
+// 	nodeLen := binary.LittleEndian.Uint64(c.lenBuf)
+// 	if uint64(cap(c.dataBuf)) < nodeLen {
+// 		fmt.Printf("  ==> extending data buf from [%d] to [%d]\n", cap(c.dataBuf), nodeLen)
+// 		c.dataBuf = make([]byte, nodeLen)
+// 	} else {
+// 		c.dataBuf = c.dataBuf[:nodeLen]
+// 	}
+
+// 	copy(c.dataBuf, c.lenBuf)
+
+// 	// TODO
+// 	n2, err2 := io.ReadFull(c.reader, c.dataBuf[8:])
+// 	if err2 != nil {
+// 		panic(fmt.Sprintf("SegmentCursorReader::Next2: %s", err2.Error()))
+// 	}
+// 	if uint64(n2) != nodeLen-8 {
+// 		panic(fmt.Sprintf("SegmentCursorReader::Next2: invalid bytes read [%d] instead [%d]", n2, nodeLen-8))
+// 	}
+
+// 	sn := NewSegmentNodeFromBuffer(c.dataBuf)
+// 	// c.nextOffset += sn.Len()
+
+// 	return sn.Key(), roaringset.BitmapLayer{
+// 		Additions: sn.Additions(),
+// 		Deletions: sn.Deletions(),
+// 	}, true
+// }

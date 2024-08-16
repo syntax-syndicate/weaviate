@@ -19,6 +19,7 @@ import (
 
 	"github.com/weaviate/sroar"
 	"github.com/weaviate/weaviate/adapters/repos/db/roaringset"
+	"github.com/weaviate/weaviate/entities/errors"
 	"github.com/weaviate/weaviate/entities/filters"
 )
 
@@ -272,13 +273,32 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 
 	// fmt.Printf(" => [all] cardinality [%v]\n", all.GetCardinality())
 
-	for bit, layer, ok := r.cursor.Next(); ok; bit, layer, ok = r.cursor.Next() {
+	type cur struct {
+		bit   uint8
+		layer roaringset.BitmapLayer
+	}
+	ch := make(chan *cur)
+
+	errors.GoWrapper(func() {
+		for bit, layer, ok := r.cursor.Next(); ok; bit, layer, ok = r.cursor.Next() {
+			if ctx.Err() != nil {
+				break
+			}
+			ch <- &cur{bit: bit, layer: layer}
+		}
+		close(ch)
+	}, nil)
+
+	for bl := range ch {
+		bit := bl.bit
+		layer := bl.layer
+
 		d_next = time.Since(t_next)
 		d_next_total += d_next
 
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
+		// if ctx.Err() != nil {
+		// 	return nil, ctx.Err()
+		// }
 
 		// if bit == 57 {
 		// 	break
@@ -326,6 +346,10 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 		t_next = time.Now()
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	// if !ANDed {
 	// 	result = result.Clone()
 	// }
@@ -343,6 +367,98 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 
 	return result, nil
 }
+
+// func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
+// 	all *sroar.Bitmap,
+// ) (*sroar.Bitmap, error) {
+// 	ANDed := false
+// 	result := all.Clone()
+// 	// t_convert := time.Now()
+// 	// result.ConvertToBitmaps()
+// 	// fmt.Printf("  ==> convert took [%s]\n", time.Since(t_convert))
+// 	// result2 := all.Clone()
+
+// 	_ = errors.GoWrapper
+// 	buf := make([]uint16, 4100)
+
+// 	t_total := time.Now()
+// 	t_next := time.Now()
+// 	var t_and, t_or, t_condense time.Time
+// 	var d_next, d_and, d_condense, d_or, d_next_total, d_and_total, d_condense_total, d_or_total time.Duration
+
+// 	// fmt.Printf(" => [all] cardinality [%v]\n", all.GetCardinality())
+
+// 	for bit, layer, ok := r.cursor.Next(); ok; bit, layer, ok = r.cursor.Next() {
+// 		d_next = time.Since(t_next)
+// 		d_next_total += d_next
+
+// 		if ctx.Err() != nil {
+// 			return nil, ctx.Err()
+// 		}
+
+// 		// if bit == 57 {
+// 		// 	break
+// 		// }
+// 		// if bit == 3 {
+// 		// 	continue
+// 		// }
+
+// 		// fmt.Printf(" => [%v] cardinality [%v]\n", bit, layer.Additions.GetCardinality())
+
+// 		// _ = bit
+// 		_ = layer
+// 		// _ = t_and
+// 		// _ = t_or
+// 		// _ = t_condense
+// 		// _ = d_and
+// 		// _ = d_or
+// 		// _ = d_condense
+
+// 		if value&(1<<(bit-1)) != 0 {
+// 			// if !ANDed {
+// 			// 	result = result.Clone()
+// 			// 	// result = sroar.ConvertToBitmapContainers(result)
+// 			// }
+// 			ANDed = true
+// 			t_and = time.Now()
+// 			// fmt.Printf("  ==> AND with bit [%v]\n", bit)
+// 			result.And2(layer.Additions, buf)
+// 			// result2.And2(layer.Additions)
+// 			d_and = time.Since(t_and)
+// 			d_and_total += d_and
+// 			t_condense = time.Now()
+// 			// result = roaringset.Condense(result)
+// 			d_condense = time.Since(t_condense)
+// 			d_condense_total += d_condense
+// 		} else if ANDed {
+// 			t_or = time.Now()
+// 			// fmt.Printf("  ==> OR with bit [%v]\n", bit)
+// 			result.Or2(layer.Additions, buf)
+// 			// result2.Or2(layer.Additions)
+// 			d_or = time.Since(t_or)
+// 			d_or_total += d_or
+// 		}
+
+// 		t_next = time.Now()
+// 	}
+
+// 	// if !ANDed {
+// 	// 	result = result.Clone()
+// 	// }
+
+// 	d_total := time.Since(t_total)
+// 	_ = d_total
+// 	fmt.Printf("  ==> total time [%s]\n", d_total)
+// 	fmt.Printf("  ==> cursor time [%s]\n", d_next_total)
+// 	fmt.Printf("  ==> or time [%s]\n", d_or_total)
+// 	fmt.Printf("  ==> and time [%s]\n", d_and_total)
+// 	fmt.Printf("  ==> condense time [%s]\n\n", d_condense_total)
+
+// 	// fmt.Printf("  ==> result card [%v]\n", result.GetCardinality())
+// 	// fmt.Printf("  ==> result2 card [%v]\n\n", result2.GetCardinality())
+
+// 	return result, nil
+// }
 
 func (r *SegmentReader) mergeBetween(ctx context.Context, valueMinInc, valueMaxExc uint64,
 	all *sroar.Bitmap,
