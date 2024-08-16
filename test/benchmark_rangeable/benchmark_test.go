@@ -30,56 +30,59 @@ import (
 var (
 	dirLsm   = "../../data-weaviate-0/rangeable/6AH8HhhmczJx/lsm/property_nf_rangeable"
 	segments = []string{
-		"segment-1719438284846555682.db",
+		// "segment-1719438284846555682.db",
 		"segment-1719971641517426314.db",
-		"segment-1720242926200850922.db",
-		"segment-1720383006099163416.db",
-		"segment-1720457804050882823.db",
-		"segment-1720490726000453273.db",
-		"segment-1720498935309534913.db",
-		"segment-1720503067652593318.db",
-		"segment-1720505123214410045.db",
-		"segment-1720506184365023528.db",
-		"segment-1720506711659850270.db",
-		"segment-1720506959712399643.db",
+		// "segment-1720242926200850922.db",
+		// "segment-1720383006099163416.db",
+		// "segment-1720457804050882823.db",
+		// "segment-1720490726000453273.db",
+		// "segment-1720498935309534913.db",
+		// "segment-1720503067652593318.db",
+		// "segment-1720505123214410045.db",
+		// "segment-1720506184365023528.db",
+		// "segment-1720506711659850270.db",
+		// "segment-1720506959712399643.db",
 	}
 )
 
 // go test -v -bench BenchmarkMergeSegmentsSequencePread -benchmem -run ^$ github.com/weaviate/weaviate/test/benchmark_rangeable
 func BenchmarkMergeSegmentsSequencePread(b *testing.B) {
-	total := time.Now()
-	for i := 0; i < len(segments); i++ {
-		single := time.Now()
-		path := filepath.Join(dirLsm, segments[i])
-		merge_segment_pread(path)
-		fmt.Printf("merging segment [%s] took [%s]\n\n", path, time.Since(single))
+	for i := 0; i < b.N; i++ {
+		total := time.Now()
+		for i := 0; i < len(segments); i++ {
+			single := time.Now()
+			path := filepath.Join(dirLsm, segments[i])
+			merge_segment_pread(path)
+			fmt.Printf("merging segment [%s] took [%s]\n\n", path, time.Since(single))
+		}
+		fmt.Printf("merging all segment took [%s]\n\n", time.Since(total))
 	}
-	fmt.Printf("merging all segment took [%s]\n\n", time.Since(total))
 }
 
 // go test -v -bench BenchmarkMergeSegmentsParallelPread -benchmem -run ^$ github.com/weaviate/weaviate/test/benchmark_rangeable
 func BenchmarkMergeSegmentsParallelPread(b *testing.B) {
 	conc := 4
+	for i := 0; i < b.N; i++ {
+		eg := new(errgroup.Group)
+		eg.SetLimit(conc)
 
-	eg := new(errgroup.Group)
-	eg.SetLimit(conc)
+		total := time.Now()
+		for i := 0; i < len(segments); i++ {
+			i := i
+			eg.Go(func() error {
+				single := time.Now()
+				path := filepath.Join(dirLsm, segments[i])
+				merge_segment_pread(path)
+				fmt.Printf("merging segment [%s] took [%s]\n\n", path, time.Since(single))
 
-	total := time.Now()
-	for i := 0; i < len(segments); i++ {
-		i := i
-		eg.Go(func() error {
-			single := time.Now()
-			path := filepath.Join(dirLsm, segments[i])
-			merge_segment_pread(path)
-			fmt.Printf("merging segment [%s] took [%s]\n\n", path, time.Since(single))
+				return nil
+			})
 
-			return nil
-		})
+		}
+		eg.Wait()
 
+		fmt.Printf("merging all segment took [%s]\n\n", time.Since(total))
 	}
-	eg.Wait()
-
-	fmt.Printf("merging all segment took [%s]\n\n", time.Since(total))
 }
 
 func merge_segment_pread(path string) {
@@ -102,3 +105,40 @@ func merge_segment_pread(path string) {
 	val := uint64(13891384759934908577)
 	segmentReader.Read(context.Background(), val, filters.OperatorGreaterThan)
 }
+
+func BenchmarkMaskUint16(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		m := uint16(0)
+		m |= 2
+		m |= 256
+		m |= 1024
+		m |= 16384
+	}
+}
+
+func BenchmarkMaskUint64(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		m := uint64(0)
+		m |= 2
+		m |= 256
+		m |= 1024
+		m |= 16384
+	}
+}
+
+// var bitmapMask []uint16
+// var bitmapMask64 []uint64
+
+// func init() {
+// 	bitmapMask = make([]uint16, 16)
+// 	for i := 0; i < 16; i++ {
+// 		bitmapMask[i] = 1 << (15 - i)
+// 	}
+
+// 	bitmapMask64 = make([]uint64, 64)
+// 	for j := 0; j < 4; j++ {
+// 		for i := 0; i < 16; i++ {
+// 			bitmapMask64[(j*16)+i] = 1 << ((j+1)*16 - i - 1)
+// 		}
+// 	}
+// }

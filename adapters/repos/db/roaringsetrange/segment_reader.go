@@ -257,12 +257,20 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 	all *sroar.Bitmap,
 ) (*sroar.Bitmap, error) {
 	ANDed := false
-	result := all
+	result := all.Clone()
+	// t_convert := time.Now()
+	// result.ConvertToBitmaps()
+	// fmt.Printf("  ==> convert took [%s]\n", time.Since(t_convert))
+	// result2 := all.Clone()
+
+	buf := make([]uint16, 4100)
 
 	t_total := time.Now()
 	t_next := time.Now()
 	var t_and, t_or, t_condense time.Time
 	var d_next, d_and, d_condense, d_or, d_next_total, d_and_total, d_condense_total, d_or_total time.Duration
+
+	// fmt.Printf(" => [all] cardinality [%v]\n", all.GetCardinality())
 
 	for bit, layer, ok := r.cursor.Next(); ok; bit, layer, ok = r.cursor.Next() {
 		d_next = time.Since(t_next)
@@ -272,26 +280,45 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 			return nil, ctx.Err()
 		}
 
+		// if bit == 57 {
+		// 	break
+		// }
+		// if bit == 3 {
+		// 	continue
+		// }
+
+		// fmt.Printf(" => [%v] cardinality [%v]\n", bit, layer.Additions.GetCardinality())
+
 		// _ = bit
-		// _ = layer
+		_ = layer
+		// _ = t_and
+		// _ = t_or
+		// _ = t_condense
+		// _ = d_and
+		// _ = d_or
+		// _ = d_condense
 
 		if value&(1<<(bit-1)) != 0 {
-			if !ANDed {
-				result = result.Clone()
-				// result = sroar.ConvertToBitmapContainers(result)
-			}
+			// if !ANDed {
+			// 	result = result.Clone()
+			// 	// result = sroar.ConvertToBitmapContainers(result)
+			// }
 			ANDed = true
 			t_and = time.Now()
-			result.And(layer.Additions)
+			// fmt.Printf("  ==> AND with bit [%v]\n", bit)
+			result.And2(layer.Additions, buf)
+			// result2.And2(layer.Additions)
 			d_and = time.Since(t_and)
 			d_and_total += d_and
 			t_condense = time.Now()
-			result = roaringset.Condense(result)
+			// result = roaringset.Condense(result)
 			d_condense = time.Since(t_condense)
 			d_condense_total += d_condense
 		} else if ANDed {
 			t_or = time.Now()
-			result.Or(layer.Additions)
+			// fmt.Printf("  ==> OR with bit [%v]\n", bit)
+			result.Or2(layer.Additions, buf)
+			// result2.Or2(layer.Additions)
 			d_or = time.Since(t_or)
 			d_or_total += d_or
 		}
@@ -299,16 +326,20 @@ func (r *SegmentReader) mergeGreaterThanEqual(ctx context.Context, value uint64,
 		t_next = time.Now()
 	}
 
-	if !ANDed {
-		result = result.Clone()
-	}
+	// if !ANDed {
+	// 	result = result.Clone()
+	// }
 
 	d_total := time.Since(t_total)
+	_ = d_total
 	fmt.Printf("  ==> total time [%s]\n", d_total)
 	fmt.Printf("  ==> cursor time [%s]\n", d_next_total)
 	fmt.Printf("  ==> or time [%s]\n", d_or_total)
 	fmt.Printf("  ==> and time [%s]\n", d_and_total)
 	fmt.Printf("  ==> condense time [%s]\n\n", d_condense_total)
+
+	// fmt.Printf("  ==> result card [%v]\n", result.GetCardinality())
+	// fmt.Printf("  ==> result2 card [%v]\n\n", result2.GetCardinality())
 
 	return result, nil
 }
