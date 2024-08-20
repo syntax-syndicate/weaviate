@@ -16,9 +16,11 @@ package lsmkv
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -39,16 +41,23 @@ type bucketIntegrationTest struct {
 type bucketIntegrationTests []bucketIntegrationTest
 
 func (tests bucketIntegrationTests) run(ctx context.Context, t *testing.T) {
+	mmapTime := time.Second * 0
+	preadTime := time.Second * 0
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			start := time.Now()
 			t.Run("mmap", func(t *testing.T) {
 				test.f(ctx, t, test.opts)
 			})
+			mmapTime += time.Since(start)
+			start2 := time.Now()
 			t.Run("pread", func(t *testing.T) {
 				test.f(ctx, t, append([]BucketOption{WithPread(true)}, test.opts...))
 			})
+			preadTime += time.Since(start2)
 		})
 	}
+	fmt.Println("mmap", mmapTime, "pread", preadTime)
 }
 
 func TestCompaction(t *testing.T) {
