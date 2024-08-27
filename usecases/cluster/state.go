@@ -144,6 +144,15 @@ func Init(userConfig Config, dataPath string, nonStorageNodes map[string]struct{
 				}).WithError(err).Error("memberlist join not successful")
 				return nil, errors.Wrap(err, "join cluster")
 			}
+			// Refresh this node in the list, in case IP address has changed.
+			err = state.list.UpdateNode(0)
+			if err != nil {
+				logger.WithFields(logrus.Fields{
+					"action":          "memberlist_update",
+					"remote_hostname": joinAddr,
+				}).WithError(err).Error("memberlist updateNode not successful")
+				return nil, errors.Wrap(err, "update cluster")
+			}
 		}
 	}
 	return &state, nil
