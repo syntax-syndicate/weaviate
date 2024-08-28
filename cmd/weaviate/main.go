@@ -302,6 +302,7 @@ func NewQuerier(log logrus.FieldLogger) (*query.GRPC, error) {
 
 	// core query API
 	api := query.NewAPI(
+		repo,
 		traverser,
 		composer.New(cfg.Authentication, weaviateOIDC, weaviateApiKey),
 		authAnonymousEnabled,

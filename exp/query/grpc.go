@@ -35,5 +35,6 @@ func NewGRPC(api *API, log logrus.FieldLogger) *GRPC {
 }
 
 func (g *GRPC) Search(ctx context.Context, req *protocol.SearchRequest) (*protocol.SearchReply, error) {
+	g.api.ensureClassTenant(req.Collection, req.Tenant)
 	return g.api.svc.Search(ctx, req)
 }
