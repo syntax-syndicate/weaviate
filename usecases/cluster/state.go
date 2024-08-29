@@ -62,7 +62,8 @@ type Config struct {
 	// failures (down nodes) faster.
 	FastFailureDetection bool `json:"fastFailureDetection" yaml:"fastFailureDetection"`
 	// LocalHost flag enables running a multi-node setup with the same localhost and different ports
-	Localhost bool `json:"localhost" yaml:"localhost"`
+	Localhost bool   `json:"localhost" yaml:"localhost"`
+	ClusterID string `json:"clusterId" yaml:"clusterId"`
 }
 
 type AuthConfig struct {
@@ -80,6 +81,11 @@ func (ba BasicAuth) Enabled() bool {
 
 func Init(userConfig Config, dataPath string, nonStorageNodes map[string]struct{}, logger logrus.FieldLogger) (_ *State, err error) {
 	cfg := memberlist.DefaultLANConfig()
+
+	if userConfig.ClusterID != "" {
+		cfg.SecretKey = []byte(fmt.Sprintf("%s%s%s", userConfig.ClusterID, userConfig.ClusterID, userConfig.ClusterID)[:16])
+	}
+
 	cfg.LogOutput = newLogParser(logger)
 	cfg.Name = userConfig.Hostname
 	state := State{
@@ -273,6 +279,18 @@ func (s *State) NodeAddress(id string) string {
 	for _, mem := range s.list.Members() {
 		if mem.Name == id {
 			return mem.Addr.String()
+		}
+	}
+	return ""
+}
+
+func (s *State) NodeIPToHostname(ip string) string {
+	s.listLock.RLock()
+	defer s.listLock.RUnlock()
+
+	for _, mem := range s.list.Members() {
+		if mem.Addr.String() == ip {
+			return mem.Name
 		}
 	}
 	return ""

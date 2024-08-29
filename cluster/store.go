@@ -104,7 +104,7 @@ type Config struct {
 
 	// ConsistencyWaitTimeout is the duration we will wait for a schema version to land on that node
 	ConsistencyWaitTimeout time.Duration
-	NodeToAddressResolver  resolver.NodeToAddress
+	NodeToAddressResolver  resolver.Resolver
 	Logger                 *logrus.Logger
 	Voter                  bool
 

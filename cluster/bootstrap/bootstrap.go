@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -34,7 +35,7 @@ type joiner interface {
 // Bootstrapper is used to bootstrap this node by attempting to join it to a RAFT cluster.
 type Bootstrapper struct {
 	joiner       joiner
-	addrResolver resolver.NodeToAddress
+	addrResolver resolver.Resolver
 	isStoreReady func() bool
 
 	localRaftAddr string
@@ -45,7 +46,7 @@ type Bootstrapper struct {
 }
 
 // NewBootstrapper constructs a new bootsrapper
-func NewBootstrapper(joiner joiner, raftID, raftAddr string, r resolver.NodeToAddress, isStoreReady func() bool) *Bootstrapper {
+func NewBootstrapper(joiner joiner, raftID, raftAddr string, r resolver.Resolver, isStoreReady func() bool) *Bootstrapper {
 	return &Bootstrapper{
 		joiner:        joiner,
 		addrResolver:  r,
@@ -70,6 +71,12 @@ func (b *Bootstrapper) Do(ctx context.Context, serverPortMap map[string]int, lg 
 	ticker := time.NewTicker(jitter(b.retryPeriod, b.jitter))
 	servers := make([]string, 0, len(serverPortMap))
 	defer ticker.Stop()
+
+	hostname := b.addrResolver.NodeIPToHostname(strings.Split(b.localRaftAddr, ":")[0])
+	if hostname == "" {
+		return fmt.Errorf("can't join this cluster given that i am not part of it")
+	}
+
 	for {
 		servers = b.servers(servers, serverPortMap)
 		select {

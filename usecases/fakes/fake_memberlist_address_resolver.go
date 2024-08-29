@@ -25,3 +25,10 @@ func (m *MockAddressResolver) NodeAddress(id string) string {
 	}
 	return "127.0.0.1"
 }
+
+func (m *MockAddressResolver) NodeIPToHostname(id string) string {
+	if m.f != nil {
+		return m.f(id)
+	}
+	return "weaviate-0"
+}
