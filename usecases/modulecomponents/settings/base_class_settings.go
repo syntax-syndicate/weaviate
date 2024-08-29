@@ -25,6 +25,7 @@ const (
 	DefaultPropertyIndexed       = true
 	DefaultVectorizeClassName    = true
 	DefaultVectorizePropertyName = false
+	DefaultLateChunking = false
 )
 
 type BaseClassSettings struct {
