@@ -9,16 +9,17 @@
 //  CONTACT: hello@weaviate.io
 //
 
-package resolver
+package resolver // TODO rename to resolve pkg
 
-// NodeToAddress allows the resolver to compute node-id to ip addresses.
-type NodeToAddress interface {
+// Resolver allows the resolver to compute node-id to ip addresses. or vice versa
+type Resolver interface {
 	// NodeAddress resolves node id into an ip address without the port.
 	NodeAddress(id string) string
+	NodeIPToHostname(ip string) string
 }
 
 type RaftConfig struct {
-	NodeToAddress     NodeToAddress
+	NodeToAddress     Resolver
 	RaftPort          int
 	IsLocalHost       bool
 	NodeNameToPortMap map[string]int

@@ -104,7 +104,7 @@ type Config struct {
 
 	// ConsistencyWaitTimeout is the duration we will wait for a schema version to land on that node
 	ConsistencyWaitTimeout time.Duration
-	NodeToAddressResolver  resolver.NodeToAddress
+	NodeToAddressResolver  resolver.Resolver
 	Logger                 *logrus.Logger
 	Voter                  bool
 
@@ -146,6 +146,8 @@ type Store struct {
 	// dbLoaded is set when the DB is loaded at startup
 	dbLoaded atomic.Bool
 
+	addrResolver resolver.Resolver
+
 	// raft implementation from external library
 	raft          *raft.Raft
 	raftResolver  types.RaftResolver
@@ -184,6 +186,7 @@ func NewFSM(cfg Config) Store {
 		log:          cfg.Logger,
 		candidates:   make(map[string]string, cfg.BootstrapExpect),
 		applyTimeout: time.Second * 20,
+		addrResolver: cfg.NodeToAddressResolver,
 		raftResolver: resolver.NewRaft(resolver.RaftConfig{
 			NodeToAddress:     cfg.NodeToAddressResolver,
 			RaftPort:          cfg.RaftPort,
@@ -222,10 +225,6 @@ func (st *Store) Open(ctx context.Context) (err error) {
 	}
 	defer func() { st.open.Store(err == nil) }()
 
-	if err := st.init(); err != nil {
-		return fmt.Errorf("initialize raft store: %w", err)
-	}
-
 	st.lastAppliedIndexToDB.Store(st.lastIndex())
 
 	// we have to open the DB before constructing new raft in case of restore calls
@@ -239,6 +238,28 @@ func (st *Store) Open(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("raft.NewRaft %v %w", st.raftTransport.LocalAddr(), err)
 	}
+
+	// for _, s := range st.raft.GetConfiguration().Configuration().Servers {
+	// 	hostname := st.addrResolver.NodeIPToHostname(strings.Split(string(s.Address), ":")[0])
+	// 	addr := st.addrResolver.NodeAddress(string(s.ID))
+	// 	if hostname == "" {
+	// 		// 	if st.IsLeader() {
+	// 		// 		err := st.Remove(string(s.ID))
+	// 		// 		if err != nil {
+	// 		// 			return err
+	// 		// 		}
+	// 		// 		st.Join()
+	// 		// 	}
+
+	// 		// 	st.raft.RemoveServer(s.ID, 0, 0)
+	// 	}
+	// 	if addr != strings.Split(string(s.Address), ":")[0] {
+	// 		st.open.Store(true)
+	// 		if err := update(ctx, string(s.ID), string(s.Address), s.Suffrage == raft.Voter); err != nil {
+	// 			return err
+	// 		}
+	// 	}
+	// }
 
 	if st.cfg.ForceOneNodeRecovery || (st.cfg.BootstrapExpect == 1 && len(st.candidates) < 2) {
 		if err := st.recoverSingleNode(st.cfg.ForceOneNodeRecovery); err != nil {

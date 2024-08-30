@@ -81,6 +81,34 @@ func (s *Raft) Join(ctx context.Context, id, addr string, voter bool) error {
 	return err
 }
 
+func (s *Raft) Update(ctx context.Context, id, addr string, voter bool) error {
+	s.log.WithFields(logrus.Fields{
+		"id":      id,
+		"address": addr,
+		"voter":   voter,
+	}).Debug("membership.update")
+	if s.store.IsLeader() {
+		if err := s.store.Remove(id); err != nil {
+			return err
+		}
+		return s.store.Join(id, addr, voter)
+	}
+	leader := s.store.Leader()
+	if leader == "" {
+		return s.leaderErr()
+	}
+
+	req := &cmd.RemovePeerRequest{Id: id}
+	_, err := s.cl.Remove(ctx, leader, req)
+	if err != nil {
+		return err
+	}
+
+	jreq := &cmd.JoinPeerRequest{Id: id, Address: addr, Voter: voter}
+	_, err = s.cl.Join(ctx, leader, jreq)
+	return err
+}
+
 func (s *Raft) Remove(ctx context.Context, id string) error {
 	s.log.WithField("id", id).Debug("membership.remove")
 	if s.store.IsLeader() {

@@ -14,8 +14,10 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/hashicorp/raft"
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/cluster/bootstrap"
 	"github.com/weaviate/weaviate/cluster/resolver"
@@ -70,9 +72,20 @@ func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
 		return fmt.Errorf("start rpc service: %w", err)
 	}
 
+	if err := c.Raft.store.init(); err != nil {
+		return fmt.Errorf("initialize raft store: %w", err)
+	}
+
 	if err := c.Raft.Open(ctx, db); err != nil {
 		return fmt.Errorf("open raft store: %w", err)
 	}
+
+	hasState, err := raft.HasExistingState(c.Raft.store.logCache, c.Raft.store.logStore, c.Raft.store.snapshotStore)
+	if err != nil {
+		return err
+	}
+
+	c.log.WithField("hasState", hasState).Info("raft init")
 
 	bs := bootstrap.NewBootstrapper(
 		c.rpcClient,
@@ -84,12 +97,57 @@ func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
 
 	bCtx, bCancel := context.WithTimeout(ctx, c.config.BootstrapTimeout)
 	defer bCancel()
-	if err := bs.Do(
-		bCtx,
-		c.config.NodeNameToPortMap,
-		c.logger,
-		c.config.Voter, c.closeBootstrapper); err != nil {
-		return fmt.Errorf("bootstrap: %w", err)
+
+	if hasState {
+		currRAFTCfg, err := raft.GetConfiguration(c.store.raftConfig(), c.store, c.store.logCache, c.store.logStore, c.store.snapshotStore, c.store.raftTransport)
+		if err != nil {
+			return err
+		}
+
+		for _, s := range currRAFTCfg.Servers {
+			hostname := c.store.addrResolver.NodeIPToHostname(strings.Split(string(s.Address), ":")[0])
+			addr := c.store.addrResolver.NodeAddress(string(s.ID))
+			if hostname == "" || addr != strings.Split(string(s.Address), ":")[0] {
+				servers := bs.Servers([]string{}, c.config.NodeNameToPortMap)
+				if leader, err := bs.Remove(ctx, servers, string(s.ID)); err != nil {
+					c.log.WithFields(logrus.Fields{
+						"servers": servers,
+						"action":  "removed cluster",
+					}).WithError(err).Warning("failed to remove cluster, will notify next if voter")
+				} else {
+					c.log.WithFields(logrus.Fields{
+						"action": "removing",
+						"leader": leader,
+						"server": s,
+					}).Info("successfully removed node")
+				}
+
+				if leader, err := bs.JoinNode(ctx, servers, string(s.ID), string(s.Address), c.config.Voter); err != nil {
+					c.log.WithFields(logrus.Fields{
+						"servers": servers,
+						"action":  "joining exiting cluster",
+					}).WithError(err).Warning("failed to join cluster, will notify next if voter")
+				} else {
+					c.log.WithFields(logrus.Fields{
+						"action":  "joining",
+						"servers": servers,
+						"server":  s,
+						"leader":  leader,
+					}).Info("successfully joined cluster")
+				}
+			}
+		}
+	}
+
+	if !hasState {
+		// don't bootstrap at all if there was already a state
+		if err := bs.Do(
+			bCtx,
+			c.config.NodeNameToPortMap,
+			c.logger,
+			c.config.Voter, c.closeBootstrapper); err != nil {
+			return fmt.Errorf("bootstrap: %w", err)
+		}
 	}
 
 	if err := c.WaitUntilDBRestored(ctx, 10*time.Second, c.closeWaitForDB); err != nil {

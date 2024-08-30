@@ -69,8 +69,8 @@ case $CONFIG in
       CLUSTER_GOSSIP_BIND_PORT="7100" \
       CLUSTER_DATA_BIND_PORT="7101" \
       RAFT_JOIN="weaviate-0:8300,weaviate-1:8302,weaviate-2:8304" \
-      RAFT_FORCE_ONE_NODE_RECOVERY="true" \
       RAFT_BOOTSTRAP_EXPECT=3 \
+      CLUSTER_ID="localhost" \
       go_run ./cmd/weaviate-server \
         --scheme http \
         --host "127.0.0.1" \
@@ -96,6 +96,7 @@ case $CONFIG in
       RAFT_BOOTSTRAP_EXPECT=3 \
       CONTEXTIONARY_URL=localhost:9999 \
       DEFAULT_VECTORIZER_MODULE=text2vec-contextionary \
+      CLUSTER_ID="localhost" \
       ENABLE_MODULES="text2vec-contextionary,backup-filesystem" \
       go_run ./cmd/weaviate-server \
         --scheme http \
@@ -115,7 +116,7 @@ case $CONFIG in
         CLUSTER_GOSSIP_BIND_PORT="7104" \
         CLUSTER_DATA_BIND_PORT="7105" \
         CLUSTER_JOIN="localhost:7100" \
-      PROMETHEUS_MONITORING_PORT="2114" \
+        PROMETHEUS_MONITORING_PORT="2114" \
         RAFT_PORT="8304" \
         RAFT_INTERNAL_RPC_PORT="8305" \
         RAFT_JOIN="weaviate-0:8300,weaviate-1:8302,weaviate-2:8304" \
@@ -123,6 +124,7 @@ case $CONFIG in
         CONTEXTIONARY_URL=localhost:9999 \
         DEFAULT_VECTORIZER_MODULE=text2vec-contextionary \
         ENABLE_MODULES="text2vec-contextionary" \
+        CLUSTER_ID="localhost" \
         go_run ./cmd/weaviate-server \
           --scheme http \
           --host "127.0.0.1" \

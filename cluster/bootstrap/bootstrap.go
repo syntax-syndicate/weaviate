@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -28,13 +29,14 @@ import (
 
 type joiner interface {
 	Join(_ context.Context, leaderAddr string, _ *cmd.JoinPeerRequest) (*cmd.JoinPeerResponse, error)
+	Remove(_tx context.Context, leaderAddr string, req *cmd.RemovePeerRequest) (*cmd.RemovePeerResponse, error)
 	Notify(_ context.Context, leaderAddr string, _ *cmd.NotifyPeerRequest) (*cmd.NotifyPeerResponse, error)
 }
 
 // Bootstrapper is used to bootstrap this node by attempting to join it to a RAFT cluster.
 type Bootstrapper struct {
 	joiner       joiner
-	addrResolver resolver.NodeToAddress
+	addrResolver resolver.Resolver
 	isStoreReady func() bool
 
 	localRaftAddr string
@@ -45,7 +47,7 @@ type Bootstrapper struct {
 }
 
 // NewBootstrapper constructs a new bootsrapper
-func NewBootstrapper(joiner joiner, raftID, raftAddr string, r resolver.NodeToAddress, isStoreReady func() bool) *Bootstrapper {
+func NewBootstrapper(joiner joiner, raftID, raftAddr string, r resolver.Resolver, isStoreReady func() bool) *Bootstrapper {
 	return &Bootstrapper{
 		joiner:        joiner,
 		addrResolver:  r,
@@ -70,14 +72,21 @@ func (b *Bootstrapper) Do(ctx context.Context, serverPortMap map[string]int, lg 
 	ticker := time.NewTicker(jitter(b.retryPeriod, b.jitter))
 	servers := make([]string, 0, len(serverPortMap))
 	defer ticker.Stop()
+
 	for {
-		servers = b.servers(servers, serverPortMap)
+		servers = b.Servers(servers, serverPortMap)
 		select {
 		case <-close:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
+			for _, s := range servers {
+				hostname := b.addrResolver.NodeIPToHostname(strings.Split(s, ":")[0])
+				if hostname == "" {
+					return fmt.Errorf("can't bootstrap this cluster given that i am not part of it")
+				}
+			}
 			if b.isStoreReady() {
 				lg.WithField("action", "bootstrap").Info("node reporting ready, node has probably recovered cluster from raft config. Exiting bootstrap process")
 				return nil
@@ -89,7 +98,7 @@ func (b *Bootstrapper) Do(ctx context.Context, serverPortMap map[string]int, lg 
 			}
 
 			// try to join an existing cluster
-			if leader, err := b.join(ctx, servers, voter); err != nil {
+			if leader, err := b.Join(ctx, servers, voter); err != nil {
 				lg.WithFields(logrus.Fields{
 					"servers": servers,
 					"action":  "bootstrap",
@@ -121,8 +130,42 @@ func (b *Bootstrapper) Do(ctx context.Context, serverPortMap map[string]int, lg 
 	}
 }
 
+func (b *Bootstrapper) JoinNode(ctx context.Context, servers []string, nodeId string, address string, voter bool) (leader string, err error) {
+	if entSentry.Enabled() {
+		span := sentry.StartSpan(ctx, "raft.bootstrap.join",
+			sentry.WithOpName("join"),
+			sentry.WithDescription("Attempt to join an existing cluster"),
+		)
+		ctx = span.Context()
+		span.SetData("servers", servers)
+		defer span.Finish()
+	}
+
+	var resp *cmd.JoinPeerResponse
+	req := &cmd.JoinPeerRequest{Id: nodeId, Address: address, Voter: voter}
+	// For each server, try to join.
+	// If we have no error then we have a leader
+	// If we have an error check for err == NOT_FOUND and leader != "" -> we contacted a non-leader node part of the
+	// cluster, let's join the leader.
+	// If no server allows us to join a cluster, return an error
+	for _, addr := range servers {
+		resp, err = b.joiner.Join(ctx, addr, req)
+		if err == nil {
+			return addr, nil
+		}
+		st := status.Convert(err)
+		if leader = resp.GetLeader(); st.Code() == codes.NotFound && leader != "" {
+			_, err = b.joiner.Join(ctx, leader, req)
+			if err == nil {
+				return leader, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("could not join a cluster from %v", servers)
+}
+
 // join attempts to join an existing leader
-func (b *Bootstrapper) join(ctx context.Context, servers []string, voter bool) (leader string, err error) {
+func (b *Bootstrapper) Join(ctx context.Context, servers []string, voter bool) (leader string, err error) {
 	if entSentry.Enabled() {
 		span := sentry.StartSpan(ctx, "raft.bootstrap.join",
 			sentry.WithOpName("join"),
@@ -156,6 +199,40 @@ func (b *Bootstrapper) join(ctx context.Context, servers []string, voter bool) (
 	return "", fmt.Errorf("could not join a cluster from %v", servers)
 }
 
+func (b *Bootstrapper) Remove(ctx context.Context, servers []string, nodeId string) (leader string, err error) {
+	if entSentry.Enabled() {
+		span := sentry.StartSpan(ctx, "raft.bootstrap.join",
+			sentry.WithOpName("join"),
+			sentry.WithDescription("Attempt to join an existing cluster"),
+		)
+		ctx = span.Context()
+		span.SetData("servers", servers)
+		defer span.Finish()
+	}
+
+	var resp *cmd.RemovePeerResponse
+	req := &cmd.RemovePeerRequest{Id: nodeId}
+	// For each server, try to join.
+	// If we have no error then we have a leader
+	// If we have an error check for err == NOT_FOUND and leader != "" -> we contacted a non-leader node part of the
+	// cluster, let's join the leader.
+	// If no server allows us to join a cluster, return an error
+	for _, addr := range servers {
+		resp, err = b.joiner.Remove(ctx, addr, req)
+		if err == nil {
+			return addr, nil
+		}
+		st := status.Convert(err)
+		if leader = resp.GetLeader(); st.Code() == codes.NotFound && leader != "" {
+			_, err = b.joiner.Remove(ctx, leader, req)
+			if err == nil {
+				return leader, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("could not remove node from cluster %v", servers)
+}
+
 // notify notifies another server of my presence
 func (b *Bootstrapper) notify(ctx context.Context, servers []string) (err error) {
 	if entSentry.Enabled() {
@@ -178,7 +255,7 @@ func (b *Bootstrapper) notify(ctx context.Context, servers []string) (err error)
 }
 
 // servers retrieves a list of server addresses based on their names and ports.
-func (b *Bootstrapper) servers(candidates []string, serverPortMap map[string]int) []string {
+func (b *Bootstrapper) Servers(candidates []string, serverPortMap map[string]int) []string {
 	candidates = candidates[:0]
 	for name, raftPort := range serverPortMap {
 		if addr := b.addrResolver.NodeAddress(name); addr != "" {

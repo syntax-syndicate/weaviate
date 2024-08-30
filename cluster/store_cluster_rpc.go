@@ -13,6 +13,8 @@ package cluster
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/hashicorp/raft"
 	"github.com/sirupsen/logrus"
@@ -49,6 +51,25 @@ func (st *Store) Remove(id string) error {
 	return st.assertFuture(st.raft.RemoveServer(raft.ServerID(id), 0, 0))
 }
 
+func (st *Store) Update(server raft.Server) error {
+	if !st.open.Load() {
+		return types.ErrNotOpen
+	}
+	if st.raft.State() != raft.Leader {
+		return types.ErrNotLeader
+	}
+
+	if err := st.assertFuture(st.raft.RemoveServer(raft.ServerID(st.raft.Leader()), 0, 0)); err != nil {
+		return err
+	}
+
+	if server.Suffrage == raft.Voter {
+		return st.assertFuture(st.raft.AddVoter(server.ID, server.Address, 0, 0))
+	}
+
+	return st.assertFuture(st.raft.AddNonvoter(server.ID, server.Address, 0, 0))
+}
+
 // Notify signals this Store that a node is ready for bootstrapping at the specified address.
 // Bootstrapping will be initiated once the number of known nodes reaches the expected level,
 // which includes this node.
@@ -81,6 +102,13 @@ func (st *Store) Notify(id, addr string) (err error) {
 			Address:  raft.ServerAddress(addr),
 		})
 		delete(st.candidates, id)
+	}
+
+	for _, s := range candidates {
+		hostname := st.addrResolver.NodeIPToHostname(strings.Split(string(s.Address), ":")[0])
+		if hostname == "" {
+			return fmt.Errorf("can't Notify this cluster given that i am not part of it")
+		}
 	}
 
 	st.log.WithFields(logrus.Fields{
