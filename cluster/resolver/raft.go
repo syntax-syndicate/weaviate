@@ -17,9 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	raftImpl "github.com/hashicorp/raft"
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/cluster/log"
+	"github.com/weaviate/weaviate/cluster/utils"
 )
 
 const (
@@ -58,15 +60,23 @@ func NewRaft(cfg RaftConfig) *raft {
 
 // ServerAddr resolves server ID to a RAFT address
 func (a *raft) ServerAddr(id raftImpl.ServerID) (raftImpl.ServerAddress, error) {
-	// Get the address from the node id
-	addr := a.Resolver.NodeAddress(string(id))
+	addr := ""
+	err := backoff.Retry(func() error {
+		// Get the address from the node id
+		addr = a.Resolver.NodeAddress(string(id))
 
-	// Update the internal notResolvedNodes if the addr if empty, otherwise delete it from the map
-	a.nodesLock.Lock()
-	defer a.nodesLock.Unlock()
-	if addr == "" {
-		a.notResolvedNodes[id] = struct{}{}
-		return "", fmt.Errorf("could not resolve server id %s", id)
+		// Update the internal notResolvedNodes if the addr if empty, otherwise delete it from the map
+		a.nodesLock.Lock()
+		defer a.nodesLock.Unlock()
+		if addr == "" {
+			a.notResolvedNodes[id] = struct{}{}
+			return fmt.Errorf("could not resolve server id %s", id)
+		}
+		return nil
+	}, utils.ConstantBackoff(3, 3*time.Second))
+
+	if err != nil {
+		return "", err
 	}
 	delete(a.notResolvedNodes, id)
 
