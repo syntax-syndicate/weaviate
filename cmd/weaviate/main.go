@@ -74,6 +74,7 @@ func main() {
 			authAnonymousEnabled,
 			appState.SchemaManager,
 			appState.BatchManager,
+			appState.DB,
 			&cfg,
 			log,
 		)

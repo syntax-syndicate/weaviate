@@ -16,6 +16,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	v1 "github.com/weaviate/weaviate/adapters/handlers/grpc/v1"
+	"github.com/weaviate/weaviate/adapters/repos/db"
 	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/grpc/generated/protocol/v1"
 	"github.com/weaviate/weaviate/usecases/auth/authentication/composer"
@@ -35,6 +36,7 @@ type API struct {
 	svc    protocol.WeaviateServer
 	schema *schema.Manager
 	batch  *objects.BatchManager
+	dbRepo *db.DB
 }
 
 func NewAPI(
@@ -43,6 +45,7 @@ func NewAPI(
 	allowAnonymousAccess bool,
 	schemaManager *schema.Manager,
 	batchManager *objects.BatchManager,
+	dbRepo *db.DB,
 	config *config.Config,
 	log logrus.FieldLogger,
 ) *API {
@@ -52,6 +55,7 @@ func NewAPI(
 		svc:    v1.NewService(traverser, authComposer, true, schemaManager, batchManager, config, log),
 		schema: schemaManager,
 		batch:  batchManager,
+		dbRepo: dbRepo,
 	}
 }
 
