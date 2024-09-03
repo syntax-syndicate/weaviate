@@ -106,10 +106,10 @@ func (g *GRPC) Search(ctx context.Context, req *protocol.SearchRequest) (*protoc
 		panic(err)
 	}
 
-	err = g.api.dbRepo.WaitForStartup(context.TODO())
-	if err != nil {
-		panic(err)
-	}
+	// err = g.api.dbRepo.WaitForStartup(context.TODO())
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	// res, err := g.api.Search(ctx, requestFromProto(req))
 	// if err != nil {
