@@ -136,8 +136,6 @@ func (c *SegmentCursorPread) read(isFirst bool) (uint8, roaringset.BitmapLayer, 
 		c.updateNodeBufMinSize(int(nodeLen) - len(deletions.ToBuffer()))
 	}
 
-	fmt.Printf("  ==> cursor key [%d] node len [%d]\n", sn.Key(), nodeLen)
-
 	return sn.Key(), roaringset.BitmapLayer{
 		Additions: sn.Additions(),
 		Deletions: deletions,
@@ -149,9 +147,6 @@ func (c *SegmentCursorPread) getNodeBuf(size int) []byte {
 	c.nodeBufPos = (c.nodeBufPos + 1) % len(c.nodeBufs)
 
 	if cap(c.nodeBufs[pos]) < size {
-		fmt.Printf("  ==> resizing cursor buffer cap [%d] size [%d] min size [%d]\n",
-			cap(c.nodeBufs[pos]), size, c.nodeBufMinSize)
-
 		newSize := c.nodeBufMinSize
 		if newSize < size {
 			newSize = size
@@ -166,8 +161,6 @@ func (c *SegmentCursorPread) getNodeBuf(size int) []byte {
 // existing buffer will fit data of following nodes
 func (c *SegmentCursorPread) updateNodeBufMinSize(size int) {
 	if c.nodeBufMinSize < size {
-		fmt.Printf("  ==> updating min size from [%d] to [%d]\n",
-			c.nodeBufMinSize, size)
 		c.nodeBufMinSize = size
 	}
 }
