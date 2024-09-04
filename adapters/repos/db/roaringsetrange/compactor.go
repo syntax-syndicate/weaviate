@@ -260,7 +260,7 @@ func (nc *nodeCompactor) takeRightKey() error {
 }
 
 func (nc *nodeCompactor) mergeLayers(key uint8, layers roaringset.BitmapLayers, name string) error {
-	merged, err := layers.Merge()
+	merged, err := layers.Merge2()
 	if err != nil {
 		return fmt.Errorf("merge bitmap layers for %s key %d: %w", name, key, err)
 	}

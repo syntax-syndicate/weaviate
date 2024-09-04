@@ -12,6 +12,7 @@
 package roaringsetrange
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -37,6 +38,8 @@ func NewMemtable(logger logrus.FieldLogger) *Memtable {
 }
 
 func (m *Memtable) Insert(key uint64, values []uint64) {
+	fmt.Printf("memtable insert key [%v] values [%v]\n", key, values)
+
 	if len(values) == 0 {
 		return
 	}
@@ -47,6 +50,8 @@ func (m *Memtable) Insert(key uint64, values []uint64) {
 }
 
 func (m *Memtable) Delete(key uint64, values []uint64) {
+	fmt.Printf("memtable delete key [%v] values [%v]\n", key, values)
+
 	if len(values) == 0 {
 		return
 	}
@@ -61,6 +66,9 @@ func (m *Memtable) Nodes() []*MemtableNode {
 	if len(m.additions) == 0 && len(m.deletions) == 0 {
 		return []*MemtableNode{}
 	}
+
+	fmt.Printf("memtable nodes additions [%v] deletions [%v]\n", m.additions, m.deletions)
+
 
 	nnDeletions := sroar.NewBitmap()
 	nnAdditions := sroar.NewBitmap()
