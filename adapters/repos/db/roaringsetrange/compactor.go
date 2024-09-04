@@ -182,48 +182,34 @@ func (nc *nodeCompactor) loopThroughKeys() error {
 	nc.keyLeft, nc.valueLeft, nc.okLeft = nc.left.First()
 	if nc.okLeft && nc.keyLeft == 0 {
 		nc.deletionsLeft = nc.valueLeft.Deletions
-		fmt.Printf("  ==> loopThroughKeys okLeft [%v] keyLeft [%v] delLeft [%v]\n",
-			nc.okLeft, nc.keyLeft, nc.deletionsLeft.ToArray())
 	} else {
 		nc.deletionsLeft = nc.emptyBitmap
-		fmt.Printf("  ==> loopThroughKeys okLeft [%v] keyLeft [%v] emptyLeft\n",
-			nc.okLeft, nc.keyLeft)
 	}
 
 	nc.keyRight, nc.valueRight, nc.okRight = nc.right.First()
 	if nc.okRight && nc.keyRight == 0 {
-		fmt.Printf("  ==> loopThroughKeys okRight [%v] keyRight [%v] delRight [%v]\n",
-			nc.okRight, nc.keyRight, nc.deletionsRight.ToArray())
 		nc.deletionsRight = nc.valueRight.Deletions
 	} else {
 		nc.deletionsRight = nc.emptyBitmap
-		fmt.Printf("  ==> loopThroughKeys okRight [%v] keyRight [%v] emptyRight\n",
-			nc.okRight, nc.keyRight)
 	}
 
 	var err error
 	for {
 		if !nc.okLeft && !nc.okRight {
-			fmt.Printf("  ==> loopThroughKeys !nc.okLeft && !nc.okRight\n")
 			return nil
 		}
 
 		if nc.okLeft && nc.okRight {
 			if nc.keyLeft == nc.keyRight {
-				fmt.Printf("  ==> loopThroughKeys nc.mergeIdenticalKeys\n")
 				err = nc.mergeIdenticalKeys()
 			} else if nc.keyLeft < nc.keyRight {
-				fmt.Printf("  ==> loopThroughKeys nc.takeLeftKey\n")
 				err = nc.takeLeftKey()
 			} else {
-				fmt.Printf("  ==> loopThroughKeys nc.takeRightKey\n")
 				err = nc.takeRightKey()
 			}
 		} else if nc.okLeft {
-			fmt.Printf("  ==> loopThroughKeys nc.takeLeftKey 2\n")
 			err = nc.takeLeftKey()
 		} else {
-			fmt.Printf("  ==> loopThroughKeys nc.takeRightKey 2\n")
 			err = nc.takeRightKey()
 		}
 
@@ -234,12 +220,10 @@ func (nc *nodeCompactor) loopThroughKeys() error {
 }
 
 func (nc *nodeCompactor) mergeIdenticalKeys() error {
-	fmt.Printf("  ==> mergeIdenticalKeys\n")
 	layers := roaringset.BitmapLayers{
 		{Additions: nc.valueLeft.Additions, Deletions: nc.deletionsLeft},
 		{Additions: nc.valueRight.Additions, Deletions: nc.deletionsRight},
 	}
-
 	if err := nc.mergeLayers(nc.keyLeft, layers, "merged"); err != nil {
 		return err
 	}
@@ -250,7 +234,6 @@ func (nc *nodeCompactor) mergeIdenticalKeys() error {
 }
 
 func (nc *nodeCompactor) takeLeftKey() error {
-	fmt.Printf("  ==> takeLeftKey\n")
 	layers := roaringset.BitmapLayers{
 		{Additions: nc.valueLeft.Additions, Deletions: nc.deletionsLeft},
 		{Additions: nc.emptyBitmap, Deletions: nc.deletionsRight},
@@ -264,7 +247,6 @@ func (nc *nodeCompactor) takeLeftKey() error {
 }
 
 func (nc *nodeCompactor) takeRightKey() error {
-	fmt.Printf("  ==> takeRightKey\n")
 	layers := roaringset.BitmapLayers{
 		{Additions: nc.emptyBitmap, Deletions: nc.deletionsLeft},
 		{Additions: nc.valueRight.Additions, Deletions: nc.deletionsRight},
@@ -278,27 +260,12 @@ func (nc *nodeCompactor) takeRightKey() error {
 }
 
 func (nc *nodeCompactor) mergeLayers(key uint8, layers roaringset.BitmapLayers, name string) error {
-	fmt.Printf("  ==> mergeLayers [%s] key [%d]\n     layer 1 add %v\n     layer 1 del %v\n     layer 2 add %v\n     layer 2 del %v\n",
-		name, key,
-		layers[0].Additions.ToArray(), layers[0].Deletions.ToArray(),
-		layers[1].Additions.ToArray(), layers[1].Deletions.ToArray())
-
-	if key == 0 || key == 4 {
-		layers[1].Additions.Stats()
-	}
-
 	merged, err := layers.Merge2()
 	if err != nil {
 		return fmt.Errorf("merge bitmap layers for %s key %d: %w", name, key, err)
 	}
 
-	fmt.Printf("  ==> mergeLayers [%s] key [%d]\n     add %v\n     del %v\n",
-		name, key, merged.Additions.ToArray(), merged.Deletions.ToArray())
-
 	if additions, deletions, skip := nc.cleanupValues(merged.Additions, merged.Deletions); !skip {
-		fmt.Printf("  ==> mergeLayers [%s] key [%d] cleanup\n     add %v\n     del %v\n",
-			name, key, additions.ToArray(), deletions.ToArray())
-
 		sn, err := NewSegmentNode(key, additions, deletions)
 		if err != nil {
 			return fmt.Errorf("new segment node for %s key %d: %w", name, key, err)
