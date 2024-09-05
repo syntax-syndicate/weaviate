@@ -148,24 +148,3 @@ func (bml BitmapLayers) Merge() (BitmapLayer, error) {
 	out.Deletions = Condense(deletions)
 	return out, nil
 }
-
-func (bml BitmapLayers) Merge2() (BitmapLayer, error) {
-	out := BitmapLayer{}
-	if len(bml) != 2 {
-		return out, fmt.Errorf("merge requires exactly two input segments")
-	}
-
-	left, right := bml[0], bml[1]
-
-	additions := left.Additions.Clone()
-	additions.AndNot(right.Deletions)
-	additions.Or(right.Additions)
-
-	deletions := left.Deletions.Clone()
-	// deletions.AndNot(right.Additions)
-	deletions.Or(right.Deletions)
-
-	out.Additions = Condense(additions)
-	out.Deletions = Condense(deletions)
-	return out, nil
-}
