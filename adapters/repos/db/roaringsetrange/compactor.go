@@ -179,6 +179,82 @@ type nodeCompactor struct {
 }
 
 func (nc *nodeCompactor) loopThroughKeys() error {
+	lkey, llayer, lok := nc.left.First()
+	rkey, rlayer, rok := nc.right.First()
+
+	if lok && lkey != 0 {
+		return fmt.Errorf("left segment does not contain key 0 (non-null bitmap)")
+	}
+	if rok && rkey != 0 {
+		return fmt.Errorf("right segment does not contain key 0 (non-null bitmap)")
+	}
+
+	// both segments empty
+	if !lok && !rok {
+		return nil
+	}
+	// left empty, take right
+	if !lok {
+		for ; rok; rkey, rlayer, rok = nc.right.Next() {
+			if err := nc.write(rkey, rlayer, "right"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// right empty, take left
+	if !rok {
+		for ; lok; lkey, llayer, lok = nc.left.Next() {
+			if err := nc.write(lkey, llayer, "left"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for {
+		if !lok && !rok {
+			return nil
+		}
+		if lok && !rok {
+			// take left
+		} else if !lok && rok {
+			// take right
+		} else if lkey < rkey {
+			// take left
+		} else if lkey > rkey {
+			// take right
+		} else {
+			// merge both
+		}
+
+		if lok && rok {
+			if lkey == rkey {
+				// merge both
+			} else if lkey < rkey {
+				// take left
+			} else {
+				// take right
+			}
+		} else if lok {
+			// take left
+		} else {
+			// take right
+		}
+	}
+
+	if lok && lkey != 0 {
+		return fmt.Errorf("left segment does not contain key 0 (non-null bitmap)")
+	}
+
+	if lok && lkey == 0 {
+		if llayer.Deletions.IsEmpty() {
+			nc.deletionsLeft = sroar.NewBitmap()
+		} else {
+			nc.deletionsLeft = llayer.Deletions.Clone()
+		}
+	}
+
 	nc.keyLeft, nc.valueLeft, nc.okLeft = nc.left.First()
 	if nc.okLeft && nc.keyLeft == 0 {
 		nc.deletionsLeft = nc.valueLeft.Deletions
@@ -217,6 +293,25 @@ func (nc *nodeCompactor) loopThroughKeys() error {
 			return err
 		}
 	}
+}
+
+func (nc *nodeCompactor) writeLeftKey(key uint8, layer roaringset.BitmapLayer) error {
+
+}
+
+func (nc *nodeCompactor) mergeLayers2(key uint8, additionsLeft, additionsRight *sroar.Bitmap,
+) roaringset.BitmapLayer {
+	additions := additionsLeft.Clone()
+	additions.AndNot(nc.deletionsRight)
+	additions.Or(additionsRight)
+
+	var deletions *sroar.Bitmap
+	if key == 0 {
+		deletions = nc.deletionsLeft.Clone()
+		deletions.Or(nc.deletionsRight)
+	}
+
+	return roaringset.BitmapLayer{Additions: additions, Deletions: deletions}
 }
 
 func (nc *nodeCompactor) mergeIdenticalKeys() error {
@@ -274,6 +369,23 @@ func (nc *nodeCompactor) mergeLayers(key uint8, layers roaringset.BitmapLayers, 
 		n, err := nc.bufw.Write(sn.ToBuffer())
 		if err != nil {
 			return fmt.Errorf("write individual node for %s key %d: %w", name, key, err)
+		}
+
+		nc.written += n
+	}
+	return nil
+}
+
+func (nc *nodeCompactor) write(key uint8, layer roaringset.BitmapLayer, segName string) error {
+	if additions, deletions, skip := nc.cleanupValues(layer.Additions, layer.Deletions); !skip {
+		sn, err := NewSegmentNode(key, additions, deletions)
+		if err != nil {
+			return fmt.Errorf("new segment node for %s key %d: %w", segName, key, err)
+		}
+
+		n, err := nc.bufw.Write(sn.ToBuffer())
+		if err != nil {
+			return fmt.Errorf("write individual node for %s key %d: %w", segName, key, err)
 		}
 
 		nc.written += n
