@@ -50,10 +50,10 @@ func (g *GRPC) Search(ctx context.Context, req *protocol.SearchRequest) (*protoc
 		if err != nil {
 			panic(err)
 		}
-		err = g.api.schema.DeleteClass(context.TODO(), &models.Principal{}, req.Collection)
-		if err != nil {
-			panic(err)
-		}
+		// err = g.api.schema.DeleteClass(context.TODO(), &models.Principal{}, req.Collection)
+		// if err != nil {
+		// 	panic(err)
+		// }
 	}
 	reqCount++
 
