@@ -105,8 +105,6 @@ func generateRandomRangeInstructions(r *rand.Rand, maxKey, maxValue, iterations 
 		instr[i].key = uint64(r.Intn(int(maxKey)))     // value
 		instr[i].value = uint64(r.Intn(int(maxValue))) // docId
 		instr[i].addition = r.Float64() > deleteRatio
-
-		fmt.Printf("instr[%d] %v\n", i, instr[i])
 	}
 
 	return instr
@@ -121,8 +119,6 @@ func controlFromRangeInstructions(instr []roaringSetRangeInstruction, maxKey uin
 			delete(unique, inst.value)
 		}
 	}
-
-	fmt.Printf("control %v\n", unique)
 
 	out := make([]*sroar.Bitmap, maxKey)
 	for i := range out {
