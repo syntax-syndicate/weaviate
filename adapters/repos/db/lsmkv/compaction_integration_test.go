@@ -41,9 +41,9 @@ type bucketIntegrationTests []bucketIntegrationTest
 func (tests bucketIntegrationTests) run(ctx context.Context, t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			// t.Run("mmap", func(t *testing.T) {
-			// 	test.f(ctx, t, test.opts)
-			// })
+			t.Run("mmap", func(t *testing.T) {
+				test.f(ctx, t, test.opts)
+			})
 			t.Run("pread", func(t *testing.T) {
 				test.f(ctx, t, append([]BucketOption{WithPread(true)}, test.opts...))
 			})
@@ -320,13 +320,13 @@ func TestCompaction(t *testing.T) {
 		// },
 
 		// RoaringSetRange
-		{
-			name: "compactionRoaringSetRangeStrategy_Random",
-			f:    compactionRoaringSetRangeStrategy_Random,
-			opts: []BucketOption{
-				WithStrategy(StrategyRoaringSetRange),
-			},
-		},
+		// {
+		// 	name: "compactionRoaringSetRangeStrategy_Random",
+		// 	f:    compactionRoaringSetRangeStrategy_Random,
+		// 	opts: []BucketOption{
+		// 		WithStrategy(StrategyRoaringSetRange),
+		// 	},
+		// },
 		// {
 		// 	name: "compactionRoaringSetRangeStrategy_Random_KeepTombstones",
 		// 	f:    compactionRoaringSetRangeStrategy_Random,
@@ -384,6 +384,14 @@ func TestCompaction(t *testing.T) {
 		// 		WithKeepTombstones(true),
 		// 	},
 		// },
+
+		{
+			name: "compactionRoaringSetRangeStrategy_BugfixOverwrittenBuffer",
+			f:    compactionRoaringSetRangeStrategy_BugfixOverwrittenBuffer,
+			opts: []BucketOption{
+				WithStrategy(StrategyRoaringSetRange),
+			},
+		},
 	}
 	tests.run(ctx, t)
 }
