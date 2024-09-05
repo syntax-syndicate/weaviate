@@ -12,7 +12,6 @@
 package roaringsetrange
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,6 +30,7 @@ func Test_Compactor(t *testing.T) {
 		right        []byte
 		expected     []segmentEntry
 		expectedRoot []segmentEntry
+		expectedErr  string
 	}
 
 	tests := []test{
@@ -79,17 +79,17 @@ func Test_Compactor(t *testing.T) {
 				{
 					key:       uint8(1),
 					additions: []uint64{22, 55},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(2),
 					additions: []uint64{33},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(3),
 					additions: []uint64{66},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 			},
 			expectedRoot: []segmentEntry{
@@ -101,17 +101,17 @@ func Test_Compactor(t *testing.T) {
 				{
 					key:       uint8(1),
 					additions: []uint64{22, 55},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(2),
 					additions: []uint64{33},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(3),
 					additions: []uint64{66},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 			},
 		},
@@ -175,22 +175,22 @@ func Test_Compactor(t *testing.T) {
 				{
 					key:       uint8(1),
 					additions: []uint64{55},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(2),
 					additions: []uint64{22},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(3),
 					additions: []uint64{33},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(4),
 					additions: []uint64{44},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 			},
 			expectedRoot: []segmentEntry{
@@ -202,22 +202,22 @@ func Test_Compactor(t *testing.T) {
 				{
 					key:       uint8(1),
 					additions: []uint64{55},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(2),
 					additions: []uint64{22},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(3),
 					additions: []uint64{33},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(4),
 					additions: []uint64{44},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 			},
 		},
@@ -261,20 +261,193 @@ func Test_Compactor(t *testing.T) {
 				{
 					key:       uint8(1),
 					additions: []uint64{},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(2),
 					additions: []uint64{},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 				{
 					key:       uint8(3),
 					additions: []uint64{},
-					deletions: []uint64{},
+					deletions: nil,
 				},
 			},
 			expectedRoot: []segmentEntry{},
+		},
+		{
+			name:         "empty both segments",
+			left:         []byte{},
+			right:        []byte{},
+			expected:     []segmentEntry{},
+			expectedRoot: []segmentEntry{},
+		},
+		{
+			name: "empty right segment",
+			left: createSegmentsFromEntries(t, []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{111},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: []uint64{222}, // ignored
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: []uint64{333}, // ignored
+				},
+			}),
+			right: []byte{},
+			expected: []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{111},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: nil,
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: nil,
+				},
+			},
+			expectedRoot: []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: nil,
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: nil,
+				},
+			},
+		},
+		{
+			name: "empty left segment",
+			left: []byte{},
+			right: createSegmentsFromEntries(t, []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{111},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: []uint64{222}, // ignored
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: []uint64{333}, // ignored
+				},
+			}),
+			expected: []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{111},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: nil,
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: nil,
+				},
+			},
+			expectedRoot: []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: nil,
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: nil,
+				},
+			},
+		},
+		{
+			name: "invalid left segment",
+			left: createSegmentsFromEntries(t, []segmentEntry{
+				{
+					key:       uint8(1),
+					additions: []uint64{12345},
+					deletions: []uint64{},
+				},
+			}),
+			right: createSegmentsFromEntries(t, []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{111},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: []uint64{222}, // ignored
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: []uint64{333}, // ignored
+				},
+			}),
+			expectedErr: "left segment: missing key 0 (non-null bitmap)",
+		},
+		{
+			name: "invalid right segment",
+			left: createSegmentsFromEntries(t, []segmentEntry{
+				{
+					key:       uint8(0),
+					additions: []uint64{11, 22, 33},
+					deletions: []uint64{111},
+				},
+				{
+					key:       uint8(1),
+					additions: []uint64{22},
+					deletions: []uint64{222}, // ignored
+				},
+				{
+					key:       uint8(2),
+					additions: []uint64{33},
+					deletions: []uint64{333}, // ignored
+				},
+			}),
+			right: createSegmentsFromEntries(t, []segmentEntry{
+				{
+					key:       uint8(1),
+					additions: []uint64{12345},
+					deletions: []uint64{},
+				},
+			}),
+			expectedErr: "right segment: missing key 0 (non-null bitmap)",
 		},
 	}
 
@@ -290,35 +463,37 @@ func Test_Compactor(t *testing.T) {
 			require.NoError(t, err)
 
 			c := NewCompactor(f, leftCursor, rightCursor, 5, false)
-			require.NoError(t, c.Do())
-
+			err = c.Do()
 			require.NoError(t, f.Close())
 
-			f, err = os.Open(segmentFile)
-			require.NoError(t, err)
+			if test.expectedErr == "" {
+				require.NoError(t, err)
 
-			header, err := segmentindex.ParseHeader(f)
-			require.NoError(t, err)
+				f, err = os.Open(segmentFile)
+				require.NoError(t, err)
 
-			segmentBytes, err := io.ReadAll(f)
-			require.NoError(t, err)
+				header, err := segmentindex.ParseHeader(f)
+				require.NoError(t, err)
 
-			require.NoError(t, f.Close())
+				segmentBytes, err := io.ReadAll(f)
+				require.NoError(t, err)
 
-			cu := NewSegmentCursorMmap(segmentBytes[:header.IndexStart-segmentindex.HeaderSize])
+				require.NoError(t, f.Close())
 
-			i := 0
-			for k, l, ok := cu.First(); ok; k, l, ok = cu.Next() {
-				fmt.Printf("  ==> i %d\n", i)
-				fmt.Printf("  ==> k %d, add %v del %v\n\n", k, l.Additions.ToArray(), l.Deletions.ToArray())
+				cu := NewSegmentCursorMmap(segmentBytes[:header.IndexStart-segmentindex.HeaderSize])
 
-				// assert.Equal(t, test.expected[i].key, k)
-				// assert.Equal(t, test.expected[i].additions, l.Additions.ToArray())
-				// assert.Equal(t, test.expected[i].deletions, l.Deletions.ToArray())
-				i++
+				i := 0
+				for k, l, ok := cu.First(); ok; k, l, ok = cu.Next() {
+					assert.Equal(t, test.expected[i].key, k)
+					assert.Equal(t, test.expected[i].additions, l.Additions.ToArray())
+					assert.Equal(t, test.expected[i].deletions, l.Deletions.ToArray())
+					i++
+				}
+
+				assert.Equal(t, len(test.expected), i, "all expected keys must have been hit")
+			} else {
+				assert.ErrorContains(t, err, test.expectedErr)
 			}
-
-			assert.Equal(t, len(test.expected), i, "all expected keys must have been hit")
 		})
 	}
 
@@ -334,32 +509,37 @@ func Test_Compactor(t *testing.T) {
 			require.NoError(t, err)
 
 			c := NewCompactor(f, leftCursor, rightCursor, 5, true)
-			require.NoError(t, c.Do())
-
+			err = c.Do()
 			require.NoError(t, f.Close())
 
-			f, err = os.Open(segmentFile)
-			require.NoError(t, err)
+			if test.expectedErr == "" {
+				require.NoError(t, err)
 
-			header, err := segmentindex.ParseHeader(f)
-			require.NoError(t, err)
+				f, err = os.Open(segmentFile)
+				require.NoError(t, err)
 
-			segmentBytes, err := io.ReadAll(f)
-			require.NoError(t, err)
+				header, err := segmentindex.ParseHeader(f)
+				require.NoError(t, err)
 
-			require.NoError(t, f.Close())
+				segmentBytes, err := io.ReadAll(f)
+				require.NoError(t, err)
 
-			cu := NewSegmentCursorMmap(segmentBytes[:header.IndexStart-segmentindex.HeaderSize])
+				require.NoError(t, f.Close())
 
-			i := 0
-			for k, l, ok := cu.First(); ok; k, l, ok = cu.Next() {
-				assert.Equal(t, test.expectedRoot[i].key, k)
-				assert.Equal(t, test.expectedRoot[i].additions, l.Additions.ToArray())
-				assert.Empty(t, l.Deletions.ToArray())
-				i++
+				cu := NewSegmentCursorMmap(segmentBytes[:header.IndexStart-segmentindex.HeaderSize])
+
+				i := 0
+				for k, l, ok := cu.First(); ok; k, l, ok = cu.Next() {
+					assert.Equal(t, test.expectedRoot[i].key, k)
+					assert.Equal(t, test.expectedRoot[i].additions, l.Additions.ToArray())
+					assert.Equal(t, test.expectedRoot[i].deletions, l.Deletions.ToArray())
+					i++
+				}
+
+				assert.Equal(t, len(test.expectedRoot), i, "all expected keys must have been hit")
+			} else {
+				assert.ErrorContains(t, err, test.expectedErr)
 			}
-
-			assert.Equal(t, len(test.expectedRoot), i, "all expected keys must have been hit")
 		})
 	}
 }
