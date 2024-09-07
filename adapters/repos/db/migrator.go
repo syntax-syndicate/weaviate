@@ -102,6 +102,7 @@ func (m *Migrator) AddClass(ctx context.Context, class *models.Class,
 		return errors.Wrap(err, "create index")
 	}
 
+	fmt.Println("NATEEindexlock migratoraddclass")
 	m.db.indexLock.Lock()
 	m.db.indices[idx.ID()] = idx
 	m.db.indexLock.Unlock()
@@ -568,6 +569,7 @@ func (m *Migrator) RecalculateVectorDimensions(ctx context.Context) error {
 		WithField("action", "reindex").
 		Info("Reindexing dimensions, this may take a while")
 
+	fmt.Println("NATEEindexlock recalculatevectordimensions")
 	m.db.indexLock.Lock()
 	defer m.db.indexLock.Unlock()
 
@@ -611,6 +613,7 @@ func (m *Migrator) RecountProperties(ctx context.Context) error {
 		WithField("action", "recount").
 		Info("Recounting properties, this may take a while")
 
+	fmt.Println("NATEEindexlock recountproperties")
 	m.db.indexLock.Lock()
 	defer m.db.indexLock.Unlock()
 	// Iterate over all indexes

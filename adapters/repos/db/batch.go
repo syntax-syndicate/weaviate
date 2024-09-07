@@ -53,6 +53,7 @@ func (db *DB) BatchPutObjects(ctx context.Context, objs objects.BatchObjects,
 
 	// wrapped by func to acquire and safely release indexLock only for duration of loop
 	func() {
+		fmt.Println("NATEEindexlock batchputobjects")
 		db.indexLock.RLock()
 		defer db.indexLock.RUnlock()
 
@@ -118,6 +119,7 @@ func (db *DB) AddBatchReferences(ctx context.Context, references objects.BatchRe
 
 	// wrapped by func to acquire and safely release indexLock only for duration of loop
 	func() {
+		fmt.Println("NATEEindexlock addbatchreferences")
 		db.indexLock.RLock()
 		defer db.indexLock.RUnlock()
 

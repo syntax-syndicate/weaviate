@@ -44,6 +44,7 @@ func (db *DB) Backupable(ctx context.Context, classes []string) error {
 
 // ListBackupable returns a list of all classes which can be backed up.
 func (db *DB) ListBackupable() []string {
+	fmt.Println("NATEEindexlock listbackupable")
 	db.indexLock.RLock()
 	defer db.indexLock.RUnlock()
 

@@ -184,6 +184,7 @@ func (db *DB) CrossClassVectorSearch(ctx context.Context, vector []float32, targ
 	var searchErrors []error
 	totalLimit := offset + limit
 
+	fmt.Println("NATEEindexlock crossclassvectorsearch")
 	db.indexLock.RLock()
 	for _, index := range db.indices {
 		wg.Add(1)
@@ -288,6 +289,7 @@ func (db *DB) objectSearch(ctx context.Context, offset, limit int,
 	// painfully slow on large schemas
 	// wrapped in func to unlock mutex within defer
 	if err := func() error {
+		fmt.Println("NATEEindexlock objectsearch")
 		db.indexLock.RLock()
 		defer db.indexLock.RUnlock()
 
@@ -362,6 +364,7 @@ func (db *DB) ResolveReferences(ctx context.Context, objs search.Results,
 func (db *DB) validateSort(sort []filters.Sort) error {
 	if len(sort) > 0 {
 		var errorMsgs []string
+		fmt.Println("NATEEindexlock validatesort")
 		db.indexLock.RLock()
 		for _, index := range db.indices {
 			err := filters.ValidateSort(db.schemaGetter.ReadOnlyClass, index.Config.ClassName, sort)

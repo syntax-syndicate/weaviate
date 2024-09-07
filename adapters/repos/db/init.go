@@ -109,6 +109,7 @@ func (db *DB) init(ctx context.Context) error {
 				return errors.Wrap(err, "create index")
 			}
 
+			fmt.Println("NATEEindexlock dbinit")
 			db.indexLock.Lock()
 			db.indices[idx.ID()] = idx
 			db.indexLock.Unlock()

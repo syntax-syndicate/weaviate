@@ -122,6 +122,7 @@ func (db *DB) localNodeShardStats(ctx context.Context,
 ) *models.NodeStats {
 	var objectCount, shardCount int64
 	if className == "" {
+		fmt.Println("NATEEindexlock loaclnodeshardstats")
 		db.indexLock.RLock()
 		defer db.indexLock.RUnlock()
 		for name, idx := range db.indices {

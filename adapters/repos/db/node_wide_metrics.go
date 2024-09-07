@@ -12,6 +12,7 @@
 package db
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -64,6 +65,7 @@ func (o *nodeWideMetricsObserver) Start() {
 }
 
 func (o *nodeWideMetricsObserver) observeIfShardsReady() {
+	fmt.Println("NATEEindexlock observeIfShardsReady")
 	o.db.indexLock.RLock()
 	defer o.db.indexLock.RUnlock()
 
@@ -174,6 +176,7 @@ func (o *nodeWideMetricsObserver) analyzeActivityDelta(currentActivity activityB
 }
 
 func (o *nodeWideMetricsObserver) getCurrentActivity() activityByCollection {
+	fmt.Println("NATEEindexlock getcurrentactivity")
 	o.db.indexLock.RLock()
 	defer o.db.indexLock.RUnlock()
 

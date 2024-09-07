@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -208,7 +209,14 @@ func (db *DB) GetIndex(className schema.ClassName) *Index {
 	)
 	// TODO-RAFT remove backoff. Eventual consistency handled by versioning
 	backoff.Retry(func() error {
+		fmt.Println("NATEE getindex indexlock")
 		db.indexLock.RLock()
+
+		debug.PrintStack()
+		time.Sleep(1 * time.Millisecond)
+
+		fmt.Println("NATEE getindex indexlock done")
+
 		defer db.indexLock.RUnlock()
 
 		index, exists = db.indices[indexID(className)]
@@ -262,6 +270,7 @@ func (db *DB) DeleteIndex(className schema.ClassName) error {
 	}
 
 	// drop index
+	fmt.Println("NATEEindexlock deleteindex")
 	db.indexLock.Lock()
 	defer db.indexLock.Unlock()
 
@@ -295,6 +304,7 @@ func (db *DB) Shutdown(ctx context.Context) error {
 		db.metricsObserver.Shutdown()
 	}
 
+	fmt.Println("NATEEindexlock shutdown")
 	db.indexLock.Lock()
 	defer db.indexLock.Unlock()
 	for id, index := range db.indices {

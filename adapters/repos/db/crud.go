@@ -67,6 +67,7 @@ func (db *DB) MultiGet(ctx context.Context, query []multi.Identifier,
 	additional additional.Properties, tenant string,
 ) ([]search.Result, error) {
 	byIndex := map[string][]multi.Identifier{}
+	fmt.Println("NATEEindexlock multiget")
 	db.indexLock.RLock()
 	defer db.indexLock.RUnlock()
 
@@ -131,6 +132,7 @@ func (db *DB) ObjectsByID(ctx context.Context, id strfmt.UUID,
 	var result []*storobj.Object
 	// TODO: Search in parallel, rather than sequentially or this will be
 	// painfully slow on large schemas
+	fmt.Println("NATEEindexlock objectsbyid")
 	db.indexLock.RLock()
 
 	for _, index := range db.indices {
@@ -218,6 +220,7 @@ func (db *DB) anyExists(ctx context.Context, id strfmt.UUID,
 ) (bool, error) {
 	// TODO: Search in parallel, rather than sequentially or this will be
 	// painfully slow on large schemas
+	fmt.Println("NATEEindexlock anyexists")
 	db.indexLock.RLock()
 	defer db.indexLock.RUnlock()
 

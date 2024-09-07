@@ -107,6 +107,8 @@ func NewShard(ctx context.Context, promMetrics *monitoring.PrometheusMetrics,
 		return nil, err
 	}
 
+	// fmt.Println("NATEE newshard sleep 20min")
+	// time.Sleep(20 * time.Minute)
 	if err := s.initNonVector(ctx, class); err != nil {
 		return nil, errors.Wrapf(err, "init shard %q", s.ID())
 	}

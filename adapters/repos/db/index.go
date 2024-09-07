@@ -182,7 +182,7 @@ type Index struct {
 	// unlock db.indexLock
 	// Use the indices
 	// RUnlock all picked indices
-	dropIndex sync.RWMutex
+	dropIndex sync.RWMutex // TODO investigate this+indexlock
 
 	metrics          *Metrics
 	centralJobQueue  chan job
@@ -282,6 +282,8 @@ func NewIndex(ctx context.Context, cfg IndexConfig,
 		return nil, fmt.Errorf("init index %q: %w", index.ID(), err)
 	}
 
+	print("NATEE NewIndex sleeping 20min")
+	time.Sleep(20 * time.Minute)
 	if err := index.initAndStoreShards(ctx, shardState, class, promMetrics); err != nil {
 		return nil, err
 	}
@@ -298,6 +300,7 @@ func (i *Index) initAndStoreShards(ctx context.Context, shardState *sharding.Sta
 	promMetrics *monitoring.PrometheusMetrics,
 ) error {
 	if i.Config.DisableLazyLoadShards {
+		fmt.Println("NATEE initAndStoreShards DisableLazyLoadShards")
 		eg := enterrors.NewErrorGroupWrapper(i.logger)
 		eg.SetLimit(_NUMCPU)
 
@@ -310,21 +313,29 @@ func (i *Index) initAndStoreShards(ctx context.Context, shardState *sharding.Sta
 
 			shardName := shardName // prevent loop variable capture
 			eg.Go(func() error {
+				fmt.Println("NATEE initAndStoreShards newshard")
 				shard, err := NewShard(ctx, promMetrics, shardName, i, class, i.centralJobQueue, i.indexCheckpoints)
+				fmt.Println("NATEE initAndStoreShards newshard done", shard, err)
 				if err != nil {
 					return fmt.Errorf("init shard %s of index %s: %w", shardName, i.ID(), err)
 				}
 
+				fmt.Println("NATEE initAndStoreShards store", shardName)
 				i.shards.Store(shardName, shard)
+				fmt.Println("NATEE initAndStoreShards store done", shardName)
 				return nil
 			}, shardName)
 		}
 
+		fmt.Println("NATEE initAndStoreShards waiting")
 		if err := eg.Wait(); err != nil {
+			fmt.Println("NATEE initAndStoreShards waiting err")
 			return err
 		}
+		fmt.Println("NATEE initAndStoreShards waiting done")
 
 		i.allShardsReady.Store(true)
+		fmt.Println("NATEE initAndStoreShards allshardsready store")
 		return nil
 	}
 
@@ -391,8 +402,13 @@ func (i *Index) initAndStoreShards(ctx context.Context, shardState *sharding.Sta
 }
 
 func (i *Index) loadLocalShardIfActive(shardName string) error {
+	fmt.Println("NATEE loadLocalShardIfActive")
 	i.shardCreateLocks.Lock(shardName)
+	fmt.Println("NATEE loadLocalShardIfActive done")
 	defer i.shardCreateLocks.Unlock(shardName)
+
+	// print("NATEE loadLocalShardIfActive sleeping 20min")
+	// time.Sleep(20 * time.Minute)
 
 	// check if set to inactive in the meantime by concurrent call
 	shard := i.shards.Load(shardName)
@@ -1672,6 +1688,7 @@ func (i *Index) IncomingSearch(ctx context.Context, shardName string,
 	additional additional.Properties,
 ) ([]*storobj.Object, []float32, error) {
 	shard, release, err := i.getOrInitLocalShardNoShutdown(ctx, shardName)
+	fmt.Println("NATEE i.incomingsearch goilsns", shard, err)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1684,9 +1701,11 @@ func (i *Index) IncomingSearch(ctx context.Context, shardName string,
 	// load, therefore we only call GetStatusNoLoad if replication is enabled -> another replica will be able to answer
 	// the request and we want to exit early
 	if i.replicationEnabled() && shard.GetStatusNoLoad() == storagestate.StatusLoading {
+		fmt.Println("NATEE i.incomingsearch lsinr0")
 		return nil, nil, enterrors.NewErrUnprocessable(fmt.Errorf("local %s shard is not ready", shardName))
 	} else {
 		if shard.GetStatus() == storagestate.StatusLoading {
+			fmt.Println("NATEE i.incomingsearch lsinr1")
 			// This effectively never happens with lazy loaded shard as GetStatus will wait for the lazy shard to load
 			// and then status will never be "StatusLoading"
 			return nil, nil, enterrors.NewErrUnprocessable(fmt.Errorf("local %s shard is not ready", shardName))
@@ -1702,8 +1721,10 @@ func (i *Index) IncomingSearch(ctx context.Context, shardName string,
 		return res, scores, nil
 	}
 
+	fmt.Println("NATEE i.incomingsearch ovs")
 	res, resDists, err := shard.ObjectVectorSearch(
 		ctx, searchVector, targetVector, distance, limit, filters, sort, groupBy, additional)
+	fmt.Println("NATEE i.incomingsearch ovsa", res, err)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "shard %s", shard.ID())
 	}
@@ -1856,10 +1877,13 @@ func (i *Index) getLocalShardNoShutdown(shardName string) (
 func (i *Index) getOrInitLocalShardNoShutdown(ctx context.Context, shardName string) (
 	shard ShardLike, release func(), err error,
 ) {
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown closeLock")
 	i.closeLock.RLock()
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown closeLock done")
 	defer i.closeLock.RUnlock()
 
 	if i.closed {
+		fmt.Println("NATEE getOrInitLocalShardNoShutdown closed")
 		return nil, func() {}, errAlreadyShutdown
 	}
 
@@ -1867,21 +1891,31 @@ func (i *Index) getOrInitLocalShardNoShutdown(ctx context.Context, shardName str
 	class := i.getSchema.ReadOnlyClass(className)
 
 	// make sure same shard is not inited in parallel
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown shardCreateLocks")
 	i.shardCreateLocks.Lock(shardName)
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown shardCreateLocks done")
 	defer i.shardCreateLocks.Unlock(shardName)
 
 	// check if created in the meantime by concurrent call
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown shards.Load")
 	shard = i.shards.Load(shardName)
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown shards.Load done", shard)
 	if shard == nil {
+		fmt.Println("NATEE getOrInitLocalShardNoShutdown initShard")
 		shard, err = i.initShard(ctx, shardName, class, i.metrics.baseMetrics, true)
+		fmt.Println("NATEE getOrInitLocalShardNoShutdown initShardDone", err)
 		if err != nil {
 			return nil, func() {}, err
 		}
 
+		fmt.Println("NATEE getOrInitLocalShardNoShutdown shards.Store")
 		i.shards.Store(shardName, shard)
+		fmt.Println("NATEE getOrInitLocalShardNoShutdown shards.Store done")
 	}
 
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown preventShutdown")
 	release, err = shard.preventShutdown()
+	fmt.Println("NATEE getOrInitLocalShardNoShutdown preventShutdown done", release, err)
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("get/init local shard %q, no shutdown: %w", shardName, err)
 	}

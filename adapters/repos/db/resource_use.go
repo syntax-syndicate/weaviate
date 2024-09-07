@@ -153,6 +153,7 @@ func (db *DB) memUseReadonly(mon *memwatch.Monitor) {
 }
 
 func (db *DB) setShardsReadOnly() {
+	fmt.Println("NATEEindexlock setshardsreadonly")
 	db.indexLock.Lock()
 	for _, index := range db.indices {
 		index.ForEachShard(func(name string, shard ShardLike) error {

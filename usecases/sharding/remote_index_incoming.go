@@ -193,11 +193,16 @@ func (rii *RemoteIndexIncoming) Search(ctx context.Context, indexName, shardName
 	keywordRanking *searchparams.KeywordRanking, sort []filters.Sort, cursor *filters.Cursor,
 	groupBy *searchparams.GroupBy, additional additional.Properties,
 ) ([]*storobj.Object, []float32, error) {
+	fmt.Println("NATEE rii.search gifis", shardName, vector)
 	index := rii.repo.GetIndexForIncomingSharding(schema.ClassName(indexName))
+	// fmt.Println("NATEE rii.search pretend index nil sleep 20min")
+	// time.Sleep(20 * time.Minute)
 	if index == nil {
+		fmt.Println("NATEE rii.search index is nil")
 		return nil, nil, enterrors.NewErrUnprocessable(errors.Errorf("local index %q not found", indexName))
 	}
 
+	fmt.Println("NATEE rii.search is", index)
 	return index.IncomingSearch(
 		ctx, shardName, vector, targetVector, distance, limit, filters, keywordRanking, sort, cursor, groupBy, additional)
 }
