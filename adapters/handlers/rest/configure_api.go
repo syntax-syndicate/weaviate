@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weaviate/fgprof"
+
 	"github.com/KimMachineGun/automemlimit/memlimit"
 	openapierrors "github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
@@ -58,7 +60,9 @@ import (
 	modgenerativeanyscale "github.com/weaviate/weaviate/modules/generative-anyscale"
 	modgenerativeaws "github.com/weaviate/weaviate/modules/generative-aws"
 	modgenerativecohere "github.com/weaviate/weaviate/modules/generative-cohere"
+	modgenerativedatabricks "github.com/weaviate/weaviate/modules/generative-databricks"
 	modgenerativedummy "github.com/weaviate/weaviate/modules/generative-dummy"
+	modgenerativefriendliai "github.com/weaviate/weaviate/modules/generative-friendliai"
 	modgenerativemistral "github.com/weaviate/weaviate/modules/generative-mistral"
 	modgenerativeoctoai "github.com/weaviate/weaviate/modules/generative-octoai"
 	modgenerativeollama "github.com/weaviate/weaviate/modules/generative-ollama"
@@ -84,9 +88,11 @@ import (
 	modt2vbigram "github.com/weaviate/weaviate/modules/text2vec-bigram"
 	modcohere "github.com/weaviate/weaviate/modules/text2vec-cohere"
 	modcontextionary "github.com/weaviate/weaviate/modules/text2vec-contextionary"
+	moddatabricks "github.com/weaviate/weaviate/modules/text2vec-databricks"
 	modgpt4all "github.com/weaviate/weaviate/modules/text2vec-gpt4all"
 	modhuggingface "github.com/weaviate/weaviate/modules/text2vec-huggingface"
 	modjinaai "github.com/weaviate/weaviate/modules/text2vec-jinaai"
+	modmistral "github.com/weaviate/weaviate/modules/text2vec-mistral"
 	modoctoai "github.com/weaviate/weaviate/modules/text2vec-octoai"
 	modtext2vecoctoai "github.com/weaviate/weaviate/modules/text2vec-octoai"
 	modollama "github.com/weaviate/weaviate/modules/text2vec-ollama"
@@ -161,20 +167,65 @@ func MakeAppState(ctx context.Context, options *swag.CommandLineOptionsGroup) *s
 
 	if appState.ServerConfig.Config.Sentry.Enabled {
 		err := sentry.Init(sentry.ClientOptions{
-			Dsn:              appState.ServerConfig.Config.Sentry.DSN,
-			Debug:            appState.ServerConfig.Config.Sentry.Debug,
-			Release:          "weaviate@" + config.DockerImageTag,
-			Environment:      appState.ServerConfig.Config.Sentry.Environment,
-			EnableTracing:    appState.ServerConfig.Config.Sentry.TracingEnabled,
-			SampleRate:       appState.ServerConfig.Config.Sentry.SampleRate,
+			// Setup related config
+			Dsn:         appState.ServerConfig.Config.Sentry.DSN,
+			Debug:       appState.ServerConfig.Config.Sentry.Debug,
+			Release:     "weaviate-core@" + config.ImageTag,
+			Environment: appState.ServerConfig.Config.Sentry.Environment,
+			// Enable tracing if requested
+			EnableTracing:    !appState.ServerConfig.Config.Sentry.TracingDisabled,
 			AttachStacktrace: true,
+			// Sample rates based on the config
+			SampleRate:         appState.ServerConfig.Config.Sentry.ErrorSampleRate,
+			ProfilesSampleRate: appState.ServerConfig.Config.Sentry.ProfileSampleRate,
+			TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
+				// Inherit decision from parent transaction (if any) if it is sampled or not
+				if ctx.Parent != nil && ctx.Parent.Sampled != sentry.SampledUndefined {
+					return 1.0
+				}
+
+				// Filter out uneeded traces
+				switch ctx.Span.Name {
+				// We are not interested in traces related to metrics endpoint
+				case "GET /metrics":
+				// These are some usual internet bot that will spam the server. Won't catch them all but we can reduce
+				// the number a bit
+				case "GET /favicon.ico":
+				case "GET /t4":
+				case "GET /ab2g":
+				case "PRI *":
+				case "GET /api/sonicos/tfa":
+				case "GET /RDWeb/Pages/en-US/login.aspx":
+				case "GET /_profiler/phpinfo":
+				case "POST /wsman":
+				case "POST /dns-query":
+				case "GET /dns-query":
+					return 0.0
+				}
+
+				// Filter out graphql queries, currently we have no context intrumentation around it and it's therefore
+				// just a blank line with 0 info except graphql resolve -> do -> return.
+				if ctx.Span.Name == "POST /v1/graphql" {
+					return 0.0
+				}
+
+				// Return the configured sample rate otherwise
+				return appState.ServerConfig.Config.Sentry.TracesSampleRate
+			}),
 		})
 		if err != nil {
-			appState.Logger.WithError(err).Error("sentry initialization failed")
-			os.Exit(1)
+			appState.Logger.
+				WithField("action", "startup").WithError(err).
+				Fatal("sentry initialization failed")
 		}
 
 		sentry.ConfigureScope(func(scope *sentry.Scope) {
+			// Set cluster ID and cluster owner using sentry user feature to distinguish multiple clusters in the UI
+			scope.SetUser(sentry.User{
+				ID:       appState.ServerConfig.Config.Sentry.ClusterId,
+				Username: appState.ServerConfig.Config.Sentry.ClusterOwner,
+			})
+			// Set any tags defined
 			for key, value := range appState.ServerConfig.Config.Sentry.Tags {
 				scope.SetTag(key, value)
 			}
@@ -322,6 +373,7 @@ func MakeAppState(ctx context.Context, options *swag.CommandLineOptionsGroup) *s
 		SnapshotThreshold:      appState.ServerConfig.Config.Raft.SnapshotThreshold,
 		ConsistencyWaitTimeout: appState.ServerConfig.Config.Raft.ConsistencyWaitTimeout,
 		MetadataOnlyVoters:     appState.ServerConfig.Config.Raft.MetadataOnlyVoters,
+		ForceOneNodeRecovery:   appState.ServerConfig.Config.Raft.ForceOneNodeRecovery,
 		DB:                     nil,
 		Parser:                 schema.NewParser(appState.Cluster, vectorIndex.ParseAndValidateConfig, migrator),
 		NodeNameToPortMap:      server2port,
@@ -330,6 +382,7 @@ func MakeAppState(ctx context.Context, options *swag.CommandLineOptionsGroup) *s
 		IsLocalHost:            appState.ServerConfig.Config.Cluster.Localhost,
 		LoadLegacySchema:       schemaRepo.LoadLegacySchema,
 		SaveLegacySchema:       schemaRepo.SaveLegacySchema,
+		SentryEnabled:          appState.ServerConfig.Config.Sentry.Enabled,
 	}
 	for _, name := range appState.ServerConfig.Config.Raft.Join[:rConfig.BootstrapExpect] {
 		if strings.Contains(name, rConfig.NodeID) {
@@ -338,13 +391,15 @@ func MakeAppState(ctx context.Context, options *swag.CommandLineOptionsGroup) *s
 		}
 	}
 
-	appState.ClusterService = rCluster.New(rConfig)
+	appState.ClusterService = rCluster.New(appState.Cluster, rConfig)
 	migrator.SetCluster(appState.ClusterService.Raft)
 
 	executor := schema.NewExecutor(migrator,
 		appState.ClusterService.SchemaReader(),
 		appState.Logger, backup.RestoreClassDir(dataPath),
 	)
+
+	offloadmod, _ := appState.Modules.OffloadBackend("offload-s3")
 	schemaManager, err := schemaUC.NewManager(migrator,
 		appState.ClusterService.Raft,
 		appState.ClusterService.SchemaReader(),
@@ -352,6 +407,7 @@ func MakeAppState(ctx context.Context, options *swag.CommandLineOptionsGroup) *s
 		appState.Logger, appState.Authorizer, appState.ServerConfig.Config,
 		vectorIndex.ParseAndValidateConfig, appState.Modules, inverted.ValidateConfig,
 		appState.Modules, appState.Cluster, scaler,
+		offloadmod,
 	)
 	if err != nil {
 		appState.Logger.
@@ -500,7 +556,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 
 	appState.Logger.WithFields(logrus.Fields{
 		"server_version":   config.ServerVersion,
-		"docker_image_tag": config.DockerImageTag,
+		"docker_image_tag": config.ImageTag,
 	}).Infof("configured versions")
 
 	api.ServeError = openapierrors.ServeError
@@ -512,7 +568,7 @@ func configureAPI(api *operations.WeaviateAPI) http.Handler {
 		appState.APIKey, appState.OIDC)
 
 	api.Logger = func(msg string, args ...interface{}) {
-		appState.Logger.WithFields(logrus.Fields{"action": "restapi_management", "docker_image_tag": config.DockerImageTag}).Infof(msg, args...)
+		appState.Logger.WithFields(logrus.Fields{"action": "restapi_management", "docker_image_tag": config.ImageTag}).Infof(msg, args...)
 	}
 
 	classifier := classification.New(appState.SchemaManager, appState.ClassificationRepo, appState.DB, // the DB is the vectorrepo
@@ -684,8 +740,22 @@ func startupRoutine(ctx context.Context, options *swag.CommandLineOptionsGroup) 
 // Defaults to log level info and json format
 func logger() *logrus.Logger {
 	logger := logrus.New()
+	logger.SetFormatter(&WeaviateTextFormatter{
+		config.GitHash,
+		config.ImageTag,
+		config.ServerVersion,
+		goruntime.Version(),
+		&logrus.TextFormatter{},
+	})
+
 	if os.Getenv("LOG_FORMAT") != "text" {
-		logger.SetFormatter(&logrus.JSONFormatter{})
+		logger.SetFormatter(&WeaviateJSONFormatter{
+			config.GitHash,
+			config.ImageTag,
+			config.ServerVersion,
+			goruntime.Version(),
+			&logrus.JSONFormatter{},
+		})
 	}
 	switch os.Getenv("LOG_LEVEL") {
 	case "panic":
@@ -731,6 +801,7 @@ func registerModules(appState *state.State) error {
 	defaultVectorizers := []string{
 		modtext2vecaws.Name,
 		modcohere.Name,
+		moddatabricks.Name,
 		modhuggingface.Name,
 		modjinaai.Name,
 		modoctoai.Name,
@@ -743,6 +814,8 @@ func registerModules(appState *state.State) error {
 		modgenerativeanyscale.Name,
 		modgenerativeaws.Name,
 		modgenerativecohere.Name,
+		modgenerativedatabricks.Name,
+		modgenerativefriendliai.Name,
 		modgenerativemistral.Name,
 		modgenerativeoctoai.Name,
 		modgenerativeopenai.Name,
@@ -909,6 +982,14 @@ func registerModules(appState *state.State) error {
 			Debug("enabled module")
 	}
 
+	if _, ok := enabledModules[moddatabricks.Name]; ok {
+		appState.Modules.Register(moddatabricks.New())
+		appState.Logger.
+			WithField("action", "startup").
+			WithField("module", moddatabricks.Name).
+			Debug("enabled module")
+	}
+
 	if _, ok := enabledModules[modqnaopenai.Name]; ok {
 		appState.Modules.Register(modqnaopenai.New())
 		appState.Logger.
@@ -925,6 +1006,14 @@ func registerModules(appState *state.State) error {
 			Debug("enabled module")
 	}
 
+	if _, ok := enabledModules[modgenerativefriendliai.Name]; ok {
+		appState.Modules.Register(modgenerativefriendliai.New())
+		appState.Logger.
+			WithField("action", "startup").
+			WithField("module", modgenerativefriendliai.Name).
+			Debug("enabled module")
+	}
+
 	if _, ok := enabledModules[modgenerativemistral.Name]; ok {
 		appState.Modules.Register(modgenerativemistral.New())
 		appState.Logger.
@@ -938,6 +1027,14 @@ func registerModules(appState *state.State) error {
 		appState.Logger.
 			WithField("action", "startup").
 			WithField("module", modgenerativeopenai.Name).
+			Debug("enabled module")
+	}
+
+	if _, ok := enabledModules[modgenerativedatabricks.Name]; ok {
+		appState.Modules.Register(modgenerativedatabricks.New())
+		appState.Logger.
+			WithField("action", "startup").
+			WithField("module", modgenerativedatabricks.Name).
 			Debug("enabled module")
 	}
 
@@ -1077,6 +1174,14 @@ func registerModules(appState *state.State) error {
 			Debug("enabled module")
 	}
 
+	if _, ok := enabledModules[modmistral.Name]; ok {
+		appState.Modules.Register(modmistral.New())
+		appState.Logger.
+			WithField("action", "startup").
+			WithField("module", modmistral.Name).
+			Debug("enabled module")
+	}
+
 	if _, ok := enabledModules[modbind.Name]; ok {
 		appState.Modules.Register(modbind.New())
 		appState.Logger.
@@ -1184,6 +1289,21 @@ func setupGoProfiling(config config.Config, logger logrus.FieldLogger) {
 		return
 	}
 
+	functionsToIgnoreInProfiling := []string{
+		"raft",
+		"http2",
+		"memberlist",
+		"selectgo", // various tickers
+		"cluster",
+		"rest",
+		"signal_recv",
+		"backgroundRead",
+		"SetupGoProfiling",
+		"serve",
+		"Serve",
+		"batchWorker",
+	}
+	http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler(functionsToIgnoreInProfiling...))
 	enterrors.GoWrapper(func() {
 		portNumber := config.Profiling.Port
 		if portNumber == 0 {
