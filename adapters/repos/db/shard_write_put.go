@@ -272,7 +272,7 @@ func (s *Shard) putObjectLSM(obj *storobj.Object, idBytes []byte,
 			return nil
 		}
 
-		objBinary, err := obj.MarshalBinary()
+		objBinary, err := obj.MarshalBinaryWithoutVectors()
 		if err != nil {
 			return errors.Wrapf(err, "marshal object %s to binary", obj.ID())
 		}

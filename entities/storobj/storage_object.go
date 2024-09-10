@@ -666,6 +666,14 @@ const (
 )
 
 func (ko *Object) MarshalBinary() ([]byte, error) {
+	return ko.marshalBinary(true)
+}
+
+func (ko *Object) MarshalBinaryWithoutVectors() ([]byte, error) {
+	return ko.marshalBinary(false)
+}
+
+func (ko *Object) marshalBinary(includeVectors bool) ([]byte, error) {
 	if ko.MarshallerVersion != 1 {
 		return nil, errors.Errorf("unsupported marshaller version %d", ko.MarshallerVersion)
 	}
@@ -683,10 +691,13 @@ func (ko *Object) MarshalBinary() ([]byte, error) {
 		return nil, err
 	}
 
-	if len(ko.Vector) > maxVectorLength {
-		return nil, fmt.Errorf("could not marshal '%s' max length exceeded (%d/%d)", "vector", len(ko.Vector), maxVectorLength)
+	var vectorLength uint32 = 0
+	if includeVectors {
+		if len(ko.Vector) > maxVectorLength {
+			return nil, fmt.Errorf("could not marshal '%s' max length exceeded (%d/%d)", "vector", len(ko.Vector), maxVectorLength)
+		}
+		vectorLength = uint32(len(ko.Vector))
 	}
-	vectorLength := uint32(len(ko.Vector))
 
 	className := []byte(ko.Class())
 	if len(className) > maxClassNameLength {
