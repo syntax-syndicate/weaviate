@@ -25,6 +25,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/pkg/errors"
 	"github.com/weaviate/weaviate/entities/backup"
 )
@@ -257,6 +258,27 @@ func (a *azureClient) Read(ctx context.Context, backupID, key string, w io.Write
 	}
 
 	return read, nil
+}
+
+func (a *azureClient) List(ctx context.Context) ([]string, error) {
+	var firstLevelKeys []string
+	pager := a.client.NewListBlobsFlatPager(a.config.Container, &container.ListBlobsFlatOptions{
+		Prefix: &a.config.BackupPath,
+	})
+
+	for pager.More() {
+		resp, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, blob := range resp.Segment.BlobItems {
+			if parts := strings.SplitN(*blob.Name, "/", 2); len(parts) > 0 {
+				firstLevelKeys = append(firstLevelKeys, parts[0])
+			}
+		}
+	}
+	return firstLevelKeys, nil
 }
 
 func (a *azureClient) SourceDataPath() string {

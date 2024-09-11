@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -222,6 +223,18 @@ func (s *s3Client) Read(ctx context.Context, backupID, key string, w io.WriteClo
 	}
 
 	return read, nil
+}
+
+func (s *s3Client) List(ctx context.Context) ([]string, error) {
+	var firstLevelKeys []string
+	objChannel := s.client.ListObjects(ctx, s.config.Bucket, minio.ListObjectsOptions{Recursive: true})
+	for obj := range objChannel {
+		if parts := strings.SplitN(obj.Key, "/", 2); len(parts) > 0 {
+			firstLevelKeys = append(firstLevelKeys, parts[0])
+		}
+	}
+
+	return firstLevelKeys, nil
 }
 
 func (s *s3Client) SourceDataPath() string {

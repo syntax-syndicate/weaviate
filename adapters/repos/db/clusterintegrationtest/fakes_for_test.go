@@ -301,6 +301,10 @@ func (f *fakeBackupBackend) Read(ctx context.Context, backupID, key string, w io
 	return 0, nil
 }
 
+func (fb *fakeBackupBackend) List(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (f *fakeBackupBackend) SourceDataPath() string {
 	f.Lock()
 	defer f.Unlock()

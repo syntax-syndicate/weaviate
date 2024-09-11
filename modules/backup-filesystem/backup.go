@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -202,6 +203,21 @@ func (m *Module) Read(ctx context.Context, backupID, key string, w io.WriteClose
 		metric.Add(float64(read))
 	}
 	return read, err
+}
+
+func (m *Module) List(ctx context.Context) ([]string, error) {
+	var ids []string
+	filepath.WalkDir(m.backupsPath, func(path string, d fs.DirEntry, err error) error {
+		if d.IsDir() {
+			// skip root
+			if path == m.backupsPath {
+				return nil
+			}
+			ids = append(ids, d.Name())
+		}
+		return nil
+	})
+	return ids, nil
 }
 
 func (m *Module) SourceDataPath() string {

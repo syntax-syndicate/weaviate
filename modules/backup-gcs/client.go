@@ -26,6 +26,7 @@ import (
 	"github.com/weaviate/weaviate/entities/backup"
 	"github.com/weaviate/weaviate/usecases/monitoring"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
@@ -360,6 +361,25 @@ func (g *gcsClient) Read(ctx context.Context, backupID, key string, w io.WriteCl
 	}
 
 	return read, nil
+}
+
+func (g *gcsClient) List(ctx context.Context) ([]string, error) {
+	var firstLevelKeys []string
+	objects := g.client.Bucket(g.config.Bucket).Objects(ctx, &storage.Query{})
+	for {
+		objectAttrs, err := objects.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if parts := strings.SplitN(objectAttrs.Name, "/", 2); len(parts) > 0 {
+			firstLevelKeys = append(firstLevelKeys, parts[0])
+		}
+	}
+	return firstLevelKeys, nil
 }
 
 func (g *gcsClient) SourceDataPath() string {

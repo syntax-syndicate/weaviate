@@ -179,6 +179,10 @@ func (fb *fakeBackend) Read(ctx context.Context, backupID, key string, w io.Writ
 	return 0, args.Error(1)
 }
 
+func (fb *fakeBackend) List(ctx context.Context) ([]string, error) {
+	return nil, nil
+}
+
 func (fb *fakeBackend) Write(ctx context.Context, backupID, key string, r io.ReadCloser) (int64, error) {
 	fb.Lock()
 	defer fb.Unlock()

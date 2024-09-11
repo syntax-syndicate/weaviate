@@ -44,4 +44,5 @@ type BackupBackend interface {
 
 	Write(ctx context.Context, backupID, key string, r io.ReadCloser) (int64, error)
 	Read(ctx context.Context, backupID, key string, w io.WriteCloser) (int64, error)
+	List(ctx context.Context) ([]string, error)
 }

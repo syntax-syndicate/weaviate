@@ -90,6 +90,10 @@ func (s *objStore) Read(ctx context.Context, key string, w io.WriteCloser) (int6
 	return s.b.Read(ctx, s.BasePath, key, w)
 }
 
+func (s *objStore) List(ctx context.Context) ([]string, error) {
+	return s.b.List(ctx)
+}
+
 func (s *objStore) Initialize(ctx context.Context) error {
 	return s.b.Initialize(ctx, s.BasePath)
 }
