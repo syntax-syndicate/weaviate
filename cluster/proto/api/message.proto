@@ -2,12 +2,17 @@ syntax = "proto3";
 
 package weaviate.internal.cluster;
 
+option go_package = "github.com/weaviate/weaviate/cluster/proto/api";
+
 service ClusterService {
   rpc RemovePeer(RemovePeerRequest) returns (RemovePeerResponse) {}
   rpc JoinPeer(JoinPeerRequest) returns (JoinPeerResponse) {}
   rpc NotifyPeer(NotifyPeerRequest) returns (NotifyPeerResponse) {}
   rpc Apply(ApplyRequest) returns (ApplyResponse) {}
   rpc Query(QueryRequest) returns (QueryResponse) {}
+
+  // WARNING Experimental rpc's below, subject to non-backward compatible changes
+  rpc GetTenantDataVersion(GetTenantDataVersionRequest) returns (GetTenantDataVersionResponse) {}
 }
 
 message JoinPeerRequest {
@@ -124,4 +129,15 @@ message DeleteTenantsRequest {
 message Tenant {
   string name = 1;
   string status = 2;
+}
+
+// WARNING Experimental messages below, subject to non-backward compatible changes
+message GetTenantDataVersionRequest {
+  string className = 1;
+  string tenantName = 2;
+}
+
+message GetTenantDataVersionResponse {
+  // TODO optional for future-proof? or just replace?
+  uint64 version = 1;
 }

@@ -116,6 +116,11 @@ func (s *Server) Query(ctx context.Context, req *cmd.QueryRequest) (*cmd.QueryRe
 	return resp, nil
 }
 
+func (s *Server) GetTenantDataVersion(ctx context.Context, req *cmd.GetTenantDataVersionRequest) (*cmd.GetTenantDataVersionResponse, error) {
+	// TODO do we need to use s.Query here? if so, why not just use Query directly?
+	return &cmd.GetTenantDataVersionResponse{Version: 42}, nil
+}
+
 // Leader returns the current leader of the RAFT cluster.
 func (s *Server) Leader() string {
 	return s.raftPeers.Leader()

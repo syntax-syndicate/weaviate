@@ -35,6 +35,9 @@ type (
 		ShardVersion uint64
 		// ShardProcesses map[tenantName-action(FREEZING/UNFREEZING)]map[nodeID]TenantsProcess
 		ShardProcesses map[string]NodeShardProcess
+		// TODO add version field to tenant instead?
+		// tenantDataVersions map[tenantName]version, currently a tenant's version is incremented each time the tenant is successfully frozen, non-tenant shards are not stored in here
+		tenantDataVersions map[string]uint64
 	}
 )
 
@@ -473,6 +476,7 @@ func (m *metaClass) applyShardProcess(name string, action command.TenantProcessR
 
 		if count == len(processes) {
 			copy.Status = req.Tenant.Status
+			m.incrementTenantDataVersion(req.Tenant.Name)
 		} else {
 			copy.Status = onAbortStatus
 			req.Tenant.Status = onAbortStatus
@@ -494,6 +498,26 @@ func (m *metaClass) shardProcess(name string, action command.TenantProcessReques
 		process = make(map[string]*api.TenantsProcess)
 	}
 	return process
+}
+
+func (m *metaClass) incrementTenantDataVersion(tenantName string) uint64 {
+	// NOTE don't need locking here as this should be run serially from within raft apply
+	if m.tenantDataVersions == nil {
+		m.tenantDataVersions = make(map[string]uint64)
+	}
+	if _, ok := m.tenantDataVersions[tenantName]; !ok {
+		m.tenantDataVersions[tenantName] = 0
+	} else {
+		// TODO can probably remove max uint64 check
+		// check for max uint64 (wraparound?)
+		if m.tenantDataVersions[tenantName] < ^uint64(0) {
+			m.tenantDataVersions[tenantName]++
+		} else {
+			// TODO error?
+			m.tenantDataVersions[tenantName] = 0
+		}
+	}
+	return m.tenantDataVersions[tenantName]
 }
 
 // freeze creates a process requests and add them in memory to compare it later when
