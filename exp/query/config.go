@@ -15,6 +15,8 @@ package query
 type Config struct {
 	GRPCListenAddr string `long:"grpc.listen" description:"gRPC address that query node listens at" default:"0.0.0.0:9090"`
 	SchemaAddr     string `long:"schema.addr" description:"address to get schema information" default:"http://0.0.0.0:8080"`
+	SchemaGRPCHost string `long:"schema.grpchost" description:"foo" default:""`
+	SchemaGRPCPort int    `long:"schema.grpcport" description:"bar" default:"8301"`
 	S3URL          string `long:"s3.url" description:"s3 URL to query offloaded tenants (e.g: s3://<url>)"`
 	S3Endpoint     string `long:"s3.endpoint" description:"s3 endpoint to if mocking s3 (e.g: via minio)"`
 

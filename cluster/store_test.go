@@ -544,7 +544,7 @@ func NewMockStore(t *testing.T, nodeID string, raftPort int) MockStore {
 			ConsistencyWaitTimeout: time.Millisecond * 50,
 		},
 	}
-	s := NewFSM(ms.cfg)
+	s := NewFSM(ms.cfg, nil)
 	ms.store = &s
 	return ms
 }

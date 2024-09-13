@@ -19,6 +19,7 @@ import (
 	"github.com/weaviate/weaviate/cluster/proto/api"
 	command "github.com/weaviate/weaviate/cluster/proto/api"
 	"github.com/weaviate/weaviate/cluster/types"
+	"github.com/weaviate/weaviate/cluster/utils"
 	"github.com/weaviate/weaviate/entities/models"
 	entSchema "github.com/weaviate/weaviate/entities/schema"
 	"github.com/weaviate/weaviate/usecases/sharding"
@@ -38,6 +39,7 @@ type (
 		// TODO add version field to tenant instead?
 		// tenantDataVersions map[tenantName]version, currently a tenant's version is incremented each time the tenant is successfully frozen, non-tenant shards are not stored in here
 		tenantDataVersions map[string]uint64
+		querierSubscribers *utils.QuerierSubscribers
 	}
 )
 
@@ -517,7 +519,13 @@ func (m *metaClass) incrementTenantDataVersion(tenantName string) uint64 {
 			m.tenantDataVersions[tenantName] = 0
 		}
 	}
-	return m.tenantDataVersions[tenantName]
+	v := m.tenantDataVersions[tenantName]
+	m.querierSubscribers.Notify(utils.ClassTenantDataVersion{
+		ClassName:         "Question",
+		TenantName:        tenantName,
+		TenantDataVersion: v,
+	})
+	return v
 }
 
 // freeze creates a process requests and add them in memory to compare it later when

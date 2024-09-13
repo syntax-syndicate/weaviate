@@ -19,12 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ClusterService_RemovePeer_FullMethodName           = "/weaviate.internal.cluster.ClusterService/RemovePeer"
-	ClusterService_JoinPeer_FullMethodName             = "/weaviate.internal.cluster.ClusterService/JoinPeer"
-	ClusterService_NotifyPeer_FullMethodName           = "/weaviate.internal.cluster.ClusterService/NotifyPeer"
-	ClusterService_Apply_FullMethodName                = "/weaviate.internal.cluster.ClusterService/Apply"
-	ClusterService_Query_FullMethodName                = "/weaviate.internal.cluster.ClusterService/Query"
-	ClusterService_GetTenantDataVersion_FullMethodName = "/weaviate.internal.cluster.ClusterService/GetTenantDataVersion"
+	ClusterService_RemovePeer_FullMethodName          = "/weaviate.internal.cluster.ClusterService/RemovePeer"
+	ClusterService_JoinPeer_FullMethodName            = "/weaviate.internal.cluster.ClusterService/JoinPeer"
+	ClusterService_NotifyPeer_FullMethodName          = "/weaviate.internal.cluster.ClusterService/NotifyPeer"
+	ClusterService_Apply_FullMethodName               = "/weaviate.internal.cluster.ClusterService/Apply"
+	ClusterService_Query_FullMethodName               = "/weaviate.internal.cluster.ClusterService/Query"
+	ClusterService_QuerierSubscription_FullMethodName = "/weaviate.internal.cluster.ClusterService/QuerierSubscription"
 )
 
 // ClusterServiceClient is the client API for ClusterService service.
@@ -36,8 +36,8 @@ type ClusterServiceClient interface {
 	NotifyPeer(ctx context.Context, in *NotifyPeerRequest, opts ...grpc.CallOption) (*NotifyPeerResponse, error)
 	Apply(ctx context.Context, in *ApplyRequest, opts ...grpc.CallOption) (*ApplyResponse, error)
 	Query(ctx context.Context, in *QueryRequest, opts ...grpc.CallOption) (*QueryResponse, error)
-	// WARNING Experimental rpc's below, subject to non-backward compatible changes
-	GetTenantDataVersion(ctx context.Context, in *GetTenantDataVersionRequest, opts ...grpc.CallOption) (*GetTenantDataVersionResponse, error)
+	// WARNING Experimental rpc's/types below, subject to non-backward compatible changes
+	QuerierSubscription(ctx context.Context, opts ...grpc.CallOption) (ClusterService_QuerierSubscriptionClient, error)
 }
 
 type clusterServiceClient struct {
@@ -93,13 +93,35 @@ func (c *clusterServiceClient) Query(ctx context.Context, in *QueryRequest, opts
 	return out, nil
 }
 
-func (c *clusterServiceClient) GetTenantDataVersion(ctx context.Context, in *GetTenantDataVersionRequest, opts ...grpc.CallOption) (*GetTenantDataVersionResponse, error) {
-	out := new(GetTenantDataVersionResponse)
-	err := c.cc.Invoke(ctx, ClusterService_GetTenantDataVersion_FullMethodName, in, out, opts...)
+func (c *clusterServiceClient) QuerierSubscription(ctx context.Context, opts ...grpc.CallOption) (ClusterService_QuerierSubscriptionClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ClusterService_ServiceDesc.Streams[0], ClusterService_QuerierSubscription_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &clusterServiceQuerierSubscriptionClient{stream}
+	return x, nil
+}
+
+type ClusterService_QuerierSubscriptionClient interface {
+	Send(*QuerierEvent) error
+	Recv() (*ServerEvent, error)
+	grpc.ClientStream
+}
+
+type clusterServiceQuerierSubscriptionClient struct {
+	grpc.ClientStream
+}
+
+func (x *clusterServiceQuerierSubscriptionClient) Send(m *QuerierEvent) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *clusterServiceQuerierSubscriptionClient) Recv() (*ServerEvent, error) {
+	m := new(ServerEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // ClusterServiceServer is the server API for ClusterService service.
@@ -111,8 +133,8 @@ type ClusterServiceServer interface {
 	NotifyPeer(context.Context, *NotifyPeerRequest) (*NotifyPeerResponse, error)
 	Apply(context.Context, *ApplyRequest) (*ApplyResponse, error)
 	Query(context.Context, *QueryRequest) (*QueryResponse, error)
-	// WARNING Experimental rpc's below, subject to non-backward compatible changes
-	GetTenantDataVersion(context.Context, *GetTenantDataVersionRequest) (*GetTenantDataVersionResponse, error)
+	// WARNING Experimental rpc's/types below, subject to non-backward compatible changes
+	QuerierSubscription(ClusterService_QuerierSubscriptionServer) error
 }
 
 // UnimplementedClusterServiceServer should be embedded to have forward compatible implementations.
@@ -134,8 +156,8 @@ func (UnimplementedClusterServiceServer) Apply(context.Context, *ApplyRequest) (
 func (UnimplementedClusterServiceServer) Query(context.Context, *QueryRequest) (*QueryResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
 }
-func (UnimplementedClusterServiceServer) GetTenantDataVersion(context.Context, *GetTenantDataVersionRequest) (*GetTenantDataVersionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetTenantDataVersion not implemented")
+func (UnimplementedClusterServiceServer) QuerierSubscription(ClusterService_QuerierSubscriptionServer) error {
+	return status.Errorf(codes.Unimplemented, "method QuerierSubscription not implemented")
 }
 
 // UnsafeClusterServiceServer may be embedded to opt out of forward compatibility for this service.
@@ -239,22 +261,30 @@ func _ClusterService_Query_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ClusterService_GetTenantDataVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTenantDataVersionRequest)
-	if err := dec(in); err != nil {
+func _ClusterService_QuerierSubscription_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ClusterServiceServer).QuerierSubscription(&clusterServiceQuerierSubscriptionServer{stream})
+}
+
+type ClusterService_QuerierSubscriptionServer interface {
+	Send(*ServerEvent) error
+	Recv() (*QuerierEvent, error)
+	grpc.ServerStream
+}
+
+type clusterServiceQuerierSubscriptionServer struct {
+	grpc.ServerStream
+}
+
+func (x *clusterServiceQuerierSubscriptionServer) Send(m *ServerEvent) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *clusterServiceQuerierSubscriptionServer) Recv() (*QuerierEvent, error) {
+	m := new(QuerierEvent)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(ClusterServiceServer).GetTenantDataVersion(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ClusterService_GetTenantDataVersion_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ClusterServiceServer).GetTenantDataVersion(ctx, req.(*GetTenantDataVersionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // ClusterService_ServiceDesc is the grpc.ServiceDesc for ClusterService service.
@@ -284,11 +314,14 @@ var ClusterService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Query",
 			Handler:    _ClusterService_Query_Handler,
 		},
+	},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "GetTenantDataVersion",
-			Handler:    _ClusterService_GetTenantDataVersion_Handler,
+			StreamName:    "QuerierSubscription",
+			Handler:       _ClusterService_QuerierSubscription_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "api/message.proto",
 }

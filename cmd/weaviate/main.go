@@ -17,6 +17,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 	"github.com/sirupsen/logrus"
+	"github.com/weaviate/weaviate/cluster/proto/api"
 	"github.com/weaviate/weaviate/exp/query"
 	"github.com/weaviate/weaviate/exp/querytenant"
 	"github.com/weaviate/weaviate/grpc/generated/protocol/v1"
@@ -54,9 +55,11 @@ func main() {
 		s3module.DataPath = opts.Query.DataPath
 		s3module.Endpoint = opts.Query.S3Endpoint
 
+		tenantDataVersionEvents := make(chan *api.QuerierEvent)
+
 		// This functionality is already in `go-client` of weaviate.
 		// TODO(kavi): Find a way to share this functionality in both go-client and in querytenant.
-		tenantInfo := querytenant.NewTenantInfo(opts.Query.SchemaAddr, querytenant.DefaultSchemaPath)
+		tenantInfo := querytenant.NewTenantInfo(opts.Query.SchemaAddr, querytenant.DefaultSchemaPath, tenantDataVersionEvents, s3module)
 
 		a := query.NewAPI(
 			tenantInfo,

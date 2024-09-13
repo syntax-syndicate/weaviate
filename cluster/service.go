@@ -23,6 +23,7 @@ import (
 	"github.com/weaviate/weaviate/cluster/resolver"
 	"github.com/weaviate/weaviate/cluster/rpc"
 	"github.com/weaviate/weaviate/cluster/schema"
+	"github.com/weaviate/weaviate/cluster/utils"
 	enterrors "github.com/weaviate/weaviate/entities/errors"
 	"github.com/weaviate/weaviate/usecases/cluster"
 )
@@ -67,14 +68,15 @@ func New(selector cluster.NodeSelector, cfg Config) *Service {
 		}
 	}
 	cl := rpc.NewClient(resolver.NewRpc(cfg.IsLocalHost, cfg.RPCPort), cfg.RaftRPCMessageMaxSize, cfg.SentryEnabled, cfg.Logger)
-	fsm := NewFSM(cfg)
+	querierSubscribers := utils.NewQuerierSubscribers()
+	fsm := NewFSM(cfg, querierSubscribers)
 	raft := NewRaft(selector, &fsm, cl)
 	return &Service{
 		Raft:              raft,
 		raftAddr:          raftAdvertisedAddress,
 		config:            &cfg,
 		rpcClient:         cl,
-		rpcServer:         rpc.NewServer(&fsm, raft, rpcListenAddress, cfg.Logger, cfg.RaftRPCMessageMaxSize, cfg.SentryEnabled),
+		rpcServer:         rpc.NewServerV2(&fsm, raft, rpcListenAddress, cfg.Logger, cfg.RaftRPCMessageMaxSize, cfg.SentryEnabled, querierSubscribers),
 		logger:            cfg.Logger,
 		closeBootstrapper: make(chan struct{}),
 		closeWaitForDB:    make(chan struct{}),

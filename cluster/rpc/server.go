@@ -15,7 +15,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"sync"
 
 	enterrors "github.com/weaviate/weaviate/entities/errors"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 	cmd "github.com/weaviate/weaviate/cluster/proto/api"
 	"github.com/weaviate/weaviate/cluster/types"
+	"github.com/weaviate/weaviate/cluster/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -49,7 +52,8 @@ type Server struct {
 	log                *logrus.Logger
 	sentryEnabled      bool
 
-	grpcServer *grpc.Server
+	grpcServer         *grpc.Server
+	querierSubscribers *utils.QuerierSubscribers
 }
 
 // NewServer returns the Server implementing the RPC interface for RAFT peers management and execute/query commands.
@@ -64,6 +68,12 @@ func NewServer(raftPeers raftPeers, raftFSM raftFSM, listenAddress string, log *
 		grpcMessageMaxSize: grpcMessageMaxSize,
 		sentryEnabled:      sentryEnabled,
 	}
+}
+
+func NewServerV2(raftPeers raftPeers, raftFSM raftFSM, listenAddress string, log *logrus.Logger, grpcMessageMaxSize int, sentryEnabled bool, querierSubscribers *utils.QuerierSubscribers) *Server {
+	s := NewServer(raftPeers, raftFSM, listenAddress, log, grpcMessageMaxSize, sentryEnabled)
+	s.querierSubscribers = querierSubscribers
+	return s
 }
 
 // JoinPeer will notify the RAFT cluster that a new peer is joining the cluster.
@@ -116,9 +126,87 @@ func (s *Server) Query(ctx context.Context, req *cmd.QueryRequest) (*cmd.QueryRe
 	return resp, nil
 }
 
-func (s *Server) GetTenantDataVersion(ctx context.Context, req *cmd.GetTenantDataVersionRequest) (*cmd.GetTenantDataVersionResponse, error) {
-	// TODO do we need to use s.Query here? if so, why not just use Query directly?
-	return &cmd.GetTenantDataVersionResponse{Version: 42}, nil
+func (s *Server) QuerierSubscription(stream cmd.ClusterService_QuerierSubscriptionServer) error {
+	// TODO handle panics/return val
+	// TODO 10 buffer?
+	querierSubscription := make(chan utils.ClassTenantDataVersion, 10)
+	s.querierSubscribers.Subscribe(querierSubscription)
+
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+
+	streamClosed := make(chan struct{})
+
+	// process events from querier
+	go func() {
+		defer wg.Done()
+		for {
+			in, err := stream.Recv()
+			if err == io.EOF {
+				fmt.Println("s.qs EOF")
+				streamClosed <- struct{}{}
+				return
+			}
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+			// TODO stream.context?
+			switch in.Type {
+			case cmd.QuerierEvent_UNSPECIFIED:
+				panic(fmt.Errorf("querier event type is unspecified"))
+			case cmd.QuerierEvent_TENANT_DATA_VERSION_READY:
+				s.querierSubscribers.AddNodeTenantDataVersion(utils.ClassTenantDataVersion{
+					ClassName:         in.ClassName,
+					TenantName:        in.TenantName,
+					TenantDataVersion: in.TenantDataVersion,
+				})
+			case cmd.QuerierEvent_TENANT_DATA_VERSION_EVICTED:
+				s.querierSubscribers.RemoveNodeTenantDataVersion(utils.ClassTenantDataVersion{
+					ClassName:         in.ClassName,
+					TenantName:        in.TenantName,
+					TenantDataVersion: in.TenantDataVersion,
+				})
+			case cmd.QuerierEvent_SHUTTING_DOWN:
+				panic(fmt.Errorf("querier notified us it's shutting down, TODO handle"))
+			}
+		}
+	}()
+
+	// send events to querier
+	// NOTE currently sending all events to all querier nodes, no filtering
+	go func() {
+		defer wg.Done()
+		for {
+			// TODO think more about this select
+			select {
+			case <-streamClosed:
+				fmt.Println("stream closed")
+				close(streamClosed)
+				s.querierSubscribers.Unsubscribe(querierSubscription)
+				return
+			// case <-stream.Context().Done():
+			// 	fmt.Println("context done")
+			// 	s.querierSubscribers.Unsubscribe(querierSubscription)
+			// 	return
+			case ctdv := <-querierSubscription:
+				err := stream.Send(&cmd.ServerEvent{
+					Type:              cmd.ServerEvent_NEW_TENANT_DATA_VERSION,
+					Class:             ctdv.ClassName,
+					Tenant:            ctdv.TenantName,
+					TenantDataVersion: ctdv.TenantDataVersion,
+				})
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
+
+	close(querierSubscription)
+	return nil
 }
 
 // Leader returns the current leader of the RAFT cluster.

@@ -15,8 +15,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/sirupsen/logrus"
+	"github.com/weaviate/weaviate/cluster/proto/api"
 	modsloads3 "github.com/weaviate/weaviate/modules/offload-s3"
 )
 
@@ -42,10 +44,13 @@ type API struct {
 	// schema *schema.Manager
 	// batch  *objects.BatchManager
 	offload *modsloads3.Module
+	onceFoo func()
 }
 
 type TenantInfo interface {
 	TenantStatus(ctx context.Context, collection, tenant string) (string, error)
+	StartQuerierSubscription(ctx context.Context, schemaGRPCHost string, schemaGRPCPort int) error
+	SendTenantDataVersionEvents(e *api.QuerierEvent)
 }
 
 func NewAPI(
@@ -59,6 +64,14 @@ func NewAPI(
 		config:  config,
 		tenant:  tenant,
 		offload: offload,
+		onceFoo: sync.OnceFunc(
+			func() {
+				err := tenant.StartQuerierSubscription(context.TODO(), config.SchemaGRPCHost, config.SchemaGRPCPort)
+				if err != nil {
+					panic(err)
+				}
+			},
+		),
 	}
 }
 
@@ -72,12 +85,18 @@ func (a *API) Search(ctx context.Context, req *SearchRequest) (*SearchResponse, 
 	if info != TenantOffLoadingStatus {
 		return nil, fmt.Errorf("tenant %q is not offloaded, %w", req.Tenant, ErrInvalidTenant)
 	}
+	fmt.Println("a.s of")
+	go a.onceFoo()
 
 	// src - s3://<collection>/<tenant>/<node>/
 	// dst (local) - <data-path/<collection>/<tenant>
+	fmt.Println("a.s aod")
 	if err := a.offload.Download(ctx, req.Collection, req.Tenant, nodeName); err != nil {
+		fmt.Println("a.s aod err", err)
 		return nil, err
 	}
+	fmt.Println("a.s aod done")
+	fmt.Println("NOTE Downloaded within Search:", req.Collection, req.Tenant)
 
 	// Expectations
 	// 0. Check if tenant status == FROZEN
@@ -86,6 +105,16 @@ func (a *API) Search(ctx context.Context, req *SearchRequest) (*SearchResponse, 
 	// 3. If it doesn't exist on object store, return 404
 	// 4. Once in the local disk, load the index
 	// 5. Searve the search.
+
+	a.tenant.SendTenantDataVersionEvents(&api.QuerierEvent{
+		Type:              api.QuerierEvent_TENANT_DATA_VERSION_READY,
+		ClassName:         req.Collection,
+		TenantName:        req.Tenant,
+		TenantDataVersion: 0,
+	})
+	fmt.Println("a.s atstdve done")
+	fmt.Println("NOTE Notified metadata server that we've downloaded within Search", req.Collection, req.Tenant)
+
 	return &SearchResponse{}, nil
 }
 

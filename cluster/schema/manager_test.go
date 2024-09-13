@@ -266,7 +266,7 @@ func TestSchemaReaderClass(t *testing.T) {
 func TestSchemaSnapshot(t *testing.T) {
 	var (
 		node   = "N1"
-		sc     = NewSchema(node, fakes.NewMockSchemaExecutor())
+		sc     = NewSchema(node, fakes.NewMockSchemaExecutor(), nil)
 		parser = fakes.NewMockParser()
 
 		cls = &models.Class{Class: "C"}
@@ -286,7 +286,7 @@ func TestSchemaSnapshot(t *testing.T) {
 	assert.Nil(t, sc.Persist(sink))
 
 	// restore snapshot
-	sc2 := NewSchema("N1", fakes.NewMockSchemaExecutor())
+	sc2 := NewSchema("N1", fakes.NewMockSchemaExecutor(), nil)
 	assert.Nil(t, sc2.Restore(sink, parser))
 	assert.Equal(t, sc.Classes, sc2.Classes)
 

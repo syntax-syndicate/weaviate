@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/raft"
 	"github.com/sirupsen/logrus"
 	command "github.com/weaviate/weaviate/cluster/proto/api"
+	"github.com/weaviate/weaviate/cluster/utils"
 	"github.com/weaviate/weaviate/entities/models"
 	gproto "google.golang.org/protobuf/proto"
 )
@@ -38,9 +39,9 @@ type SchemaManager struct {
 	log    *logrus.Logger
 }
 
-func NewSchemaManager(nodeId string, db Indexer, parser Parser, log *logrus.Logger) *SchemaManager {
+func NewSchemaManager(nodeId string, db Indexer, parser Parser, log *logrus.Logger, querierSubscribers *utils.QuerierSubscribers) *SchemaManager {
 	return &SchemaManager{
-		schema: NewSchema(nodeId, db),
+		schema: NewSchema(nodeId, db, querierSubscribers),
 		db:     db,
 		parser: parser,
 		log:    log,
