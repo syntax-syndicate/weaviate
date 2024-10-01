@@ -48,9 +48,7 @@ func CreateClass(t *testing.T, class *models.Class) {
 	t.Helper()
 	params := schema.NewSchemaObjectsCreateParams().WithObjectClass(class)
 	resp, err := Client(t).Schema.SchemaObjectsCreate(params, nil)
-	// TODO shall be removed with the DB is idempotent
-	// delete class before trying to create in case it was existing.
-	if err != nil && strings.Contains(err.Error(), "exists") {
+	if err != nil {
 		return
 	}
 	AssertRequestOk(t, resp, err, nil)
@@ -173,10 +171,10 @@ func DeleteObject(t *testing.T, object *models.Object) {
 	AssertRequestOk(t, resp, err, nil)
 }
 
-func DeleteObjectCL(t *testing.T, object *models.Object, cl replica.ConsistencyLevel) {
+func DeleteObjectCL(t *testing.T, class string, id strfmt.UUID, cl replica.ConsistencyLevel) {
 	cls := string(cl)
 	params := objects.NewObjectsClassDeleteParams().
-		WithClassName(object.Class).WithID(object.ID).WithConsistencyLevel(&cls)
+		WithClassName(class).WithID(id).WithConsistencyLevel(&cls)
 	resp, err := Client(t).Objects.ObjectsClassDelete(params, nil)
 	AssertRequestOk(t, resp, err, nil)
 }
