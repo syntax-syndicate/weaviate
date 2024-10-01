@@ -1173,10 +1173,10 @@
             "items": {
               "type": "string"
             }
-          },             
+          },
           "status": {
             "description": "status of backup process",
-            "type": "string",          
+            "type": "string",
             "enum": [
               "STARTED",
               "TRANSFERRING",
@@ -4969,6 +4969,7 @@
         }
       },
       "get": {
+        "summary": "List backups in progress",
         "description": "List all backups in progress",
         "operationId": "backups.list",
         "x-serviceIds": [
@@ -4989,7 +4990,7 @@
         "responses": {
           "200": {
             "description": "Existed backups",
-            "schema": {              
+            "schema": {
               "$ref": "#/definitions/BackupListResponse"
             }
           },
@@ -5081,6 +5082,7 @@
         }
       },
       "delete": {
+        "summary": "Cancel backup",
         "description": "Cancel created backup with specified ID",
         "operationId": "backups.cancel",
         "x-serviceIds": [
@@ -5103,7 +5105,7 @@
             "required": true,
             "type": "string",
             "description": "The ID of a backup. Must be URL-safe and work as a filesystem path, only lowercase, numbers, underscore, minus characters allowed."
-          }           
+          }
         ],
         "responses": {
           "204": {
@@ -5117,7 +5119,7 @@
             "schema": {
               "$ref": "#/definitions/ErrorResponse"
             }
-          },   
+          },
           "422": {
             "description": "Invalid backup cancellation attempt.",
             "schema": {
