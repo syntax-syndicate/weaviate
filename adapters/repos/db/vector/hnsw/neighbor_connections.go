@@ -15,6 +15,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
@@ -25,6 +27,8 @@ import (
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/visited"
 	"github.com/weaviate/weaviate/entities/storobj"
 )
+
+const defaultTombstoneCleanupNodeLimit = 100000
 
 func (h *hnsw) findAndConnectNeighbors(node *vertex,
 	entryPointID uint64, nodeVec []float32, distancer compressionhelpers.CompressorDistancer, targetLevel, currentMaxLevel int,
@@ -59,6 +63,7 @@ type neighborFinderConnector struct {
 	denyList        helpers.AllowList
 	// bufLinksLog     BufferedLinksLogger
 	tombstoneCleanupNodes bool
+	tombstoneCleanupDepth int
 }
 
 func newNeighborFinderConnector(graph *hnsw, node *vertex, entryPointID uint64,
@@ -112,13 +117,15 @@ func (n *neighborFinderConnector) processNode(id uint64) (float32, error) {
 	return dist, nil
 }
 
-func (n *neighborFinderConnector) processRecursively(from uint64, results *priorityqueue.Queue[any], visited visited.ListSet, level, top int) error {
-	if top <= 0 {
+func (n *neighborFinderConnector) processRecursively(from uint64, results *priorityqueue.Queue[any], visited visited.ListSet, level, top int, limit *int) error {
+	if top <= 0 || *limit <= 0 {
 		return nil
 	}
 	if err := n.ctx.Err(); err != nil {
 		return err
 	}
+
+	*limit--
 
 	n.graph.RLock()
 	nodesLen := uint64(len(n.graph.nodes))
@@ -170,6 +177,9 @@ func (n *neighborFinderConnector) processRecursively(from uint64, results *prior
 		}
 	}
 	for _, id := range pending {
+		if *limit <= 0 {
+			break
+		}
 		if results.Len() >= top {
 			dist, err := n.processNode(id)
 			if err != nil {
@@ -184,7 +194,7 @@ func (n *neighborFinderConnector) processRecursively(from uint64, results *prior
 				continue
 			}
 		}
-		err := n.processRecursively(id, results, visited, level, top)
+		err := n.processRecursively(id, results, visited, level, top, limit)
 		if err != nil {
 			return err
 		}
@@ -202,6 +212,7 @@ func (n *neighborFinderConnector) doAtLevel(level int) error {
 
 	if n.tombstoneCleanupNodes {
 		results = n.graph.pools.pqResults.GetMax(n.graph.efConstruction)
+		nodeLimit := tombstoneCleanupNodeLimit()
 
 		n.graph.pools.visitedListsLock.RLock()
 		visited := n.graph.pools.visitedLists.Borrow()
@@ -226,7 +237,7 @@ func (n *neighborFinderConnector) doAtLevel(level int) error {
 		}
 		for _, id := range pending {
 			visited.Visit(id)
-			err := n.processRecursively(id, results, visited, level, top)
+			err := n.processRecursively(id, results, visited, level, top, &nodeLimit)
 			if err != nil {
 				n.graph.pools.visitedListsLock.RLock()
 				n.graph.pools.visitedLists.Return(visited)
@@ -519,4 +530,14 @@ func (n *neighborFinderConnector) tryEpCandidate(candidate uint64) (bool, error)
 	n.entryPointDist = dist
 	n.entryPointID = candidate
 	return true, nil
+}
+
+func tombstoneCleanupNodeLimit() int {
+	if v := os.Getenv("TOMBSTONE_DELETION_NODE_LIMIT"); v != "" {
+		asInt, err := strconv.Atoi(v)
+		if err == nil && asInt > 0 {
+			return int(asInt)
+		}
+	}
+	return defaultTombstoneCleanupNodeLimit
 }
