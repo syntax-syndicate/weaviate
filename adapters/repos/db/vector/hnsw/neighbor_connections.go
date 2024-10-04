@@ -118,7 +118,7 @@ func (n *neighborFinderConnector) processNode(id uint64) (float32, error) {
 }
 
 func (n *neighborFinderConnector) processRecursively(from uint64, results *priorityqueue.Queue[any], visited visited.ListSet, level, top int, limit *int) error {
-	if top <= 0 || *limit <= 0 {
+	if top <= 0 || limit == nil || *limit <= 0 {
 		return nil
 	}
 	if err := n.ctx.Err(); err != nil {
