@@ -14,6 +14,7 @@ package cluster
 import (
 	"errors"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/cluster/types"
@@ -23,18 +24,25 @@ import (
 // This operation must be executed on the leader, otherwise, it will fail with ErrNotLeader.
 // If the cluster has not been opened yet, it will return ErrNotOpen.
 func (st *Store) Join(id, addr string, voter bool) error {
+	defer spew.Dump("join done")
+	spew.Dump("received join", id, voter)
 	if !st.open.Load() {
+		spew.Dump("join err not open")
 		return types.ErrNotOpen
 	}
+	spew.Dump("join check leader")
 	if st.raft.State() != raft.Leader {
+		spew.Dump("join err not leader")
 		return types.ErrNotLeader
 	}
 
 	rID, rAddr := raft.ServerID(id), raft.ServerAddress(addr)
 
 	if !voter {
+		spew.Dump("join add non voter")
 		return st.assertFuture(st.raft.AddNonvoter(rID, rAddr, 0, 0))
 	}
+	spew.Dump("join add voter")
 	return st.assertFuture(st.raft.AddVoter(rID, rAddr, 0, 0))
 }
 

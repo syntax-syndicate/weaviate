@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hashicorp/raft"
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/cluster/bootstrap"
@@ -117,9 +118,13 @@ func (c *Service) Open(ctx context.Context, db schema.Indexer) error {
 	defer bCancel()
 	if hasState {
 		joiner := bootstrap.NewJoiner(c.rpcClient, c.config.NodeID, c.raftAddr, c.config.Voter)
+		i := 0
 		err = backoff.Retry(func() error {
 			joinNodes := bootstrap.ResolveRemoteNodes(nodeToAddressResolver, c.config.NodeNameToPortMap)
+			spew.Dump("Backoff iteration", i, joinNodes)
 			_, err := joiner.Do(bootstrapCtx, c.logger, joinNodes)
+			spew.Dump("Backoff iteration result", i, err)
+			i++
 			return err
 		}, backoff.WithContext(backoff.NewConstantBackOff(1*time.Second), bootstrapCtx))
 		if err != nil {

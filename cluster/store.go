@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	enterrors "github.com/weaviate/weaviate/entities/errors"
 
 	"github.com/hashicorp/raft"
@@ -589,7 +590,10 @@ func (st *Store) LeaderWithID() (raft.ServerAddress, raft.ServerID) {
 }
 
 func (st *Store) assertFuture(fut raft.IndexFuture) error {
-	if err := fut.Error(); err != nil && errors.Is(err, raft.ErrNotLeader) {
+	spew.Dump("wait for raft")
+	err := fut.Error()
+	spew.Dump("done waiting for raft")
+	if err != nil && errors.Is(err, raft.ErrNotLeader) {
 		return types.ErrNotLeader
 	} else {
 		return err

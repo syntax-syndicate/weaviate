@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/getsentry/sentry-go"
 	"github.com/sirupsen/logrus"
 	cmd "github.com/weaviate/weaviate/cluster/proto/api"
@@ -65,7 +66,9 @@ func (j *Joiner) Do(ctx context.Context, lg *logrus.Logger, remoteNodes []string
 	// cluster, let's join the leader.
 	// If no server allows us to join a cluster, return an error
 	for _, addr := range remoteNodes {
+		spew.Dump("request GO to", addr)
 		resp, err = j.peerJoiner.Join(ctx, addr, req)
+		spew.Dump("request DONE to", addr)
 		if err == nil {
 			return addr, nil
 		}
