@@ -551,24 +551,29 @@ func (h *hnsw) handleDeletedNode(docID uint64) {
 }
 
 type FastSet struct {
-	boolSet []bool
-	size    int
+	sparseVisitedList *visited.SparseSet
+	max               uint64
+	size              int
 }
 
-func NewFastSet(allow helpers.AllowList) *FastSet {
-	bools := make([]bool, allow.Max()+1)
+func NewFastSet(allow helpers.AllowList, sparseVisitedList *visited.SparseSet) *FastSet {
+	max := uint64(0)
 	it := allow.Iterator()
 	for docID, ok := it.Next(); ok; docID, ok = it.Next() {
-		bools[docID] = true
+		sparseVisitedList.Visit(docID)
+		if docID > max {
+			max = docID
+		}
 	}
 	return &FastSet{
-		boolSet: bools,
-		size:    allow.Len(),
+		sparseVisitedList: sparseVisitedList,
+		max:               max,
+		size:              allow.Len(),
 	}
 }
 
 func (s *FastSet) Contains(node uint64) bool {
-	return uint64(len(s.boolSet)) > node && s.boolSet[node]
+	return s.sparseVisitedList.Visited(node)
 }
 
 func (s *FastSet) DeepCopy() helpers.AllowList {
@@ -625,8 +630,8 @@ func (s *fastIterator) Len() int {
 
 func (s *fastIterator) Next() (uint64, bool) {
 	index := s.current
-	size := uint64(len(s.source.boolSet))
-	for index < size && !s.source.boolSet[index] {
+	size := s.source.max
+	for index < size && !s.source.Contains(index) {
 		index++
 	}
 	s.current = index + 1
@@ -642,7 +647,9 @@ func (h *hnsw) knnSearchByVector(searchVec []float32, k int,
 
 	var allowList helpers.AllowList = nil
 	if allowOld != nil {
-		allowList = NewFastSet(allowOld)
+		sparseVisited := h.pools.sparseVisitedLists.Get()
+		defer h.pools.sparseVisitedLists.Put(sparseVisited)
+		allowList = NewFastSet(allowOld, sparseVisited)
 	}
 
 	if k < 0 {

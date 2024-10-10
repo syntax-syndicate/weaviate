@@ -21,8 +21,9 @@ import (
 )
 
 type pools struct {
-	visitedLists     *visited.Pool
-	visitedListsLock *sync.RWMutex
+	visitedLists       *visited.Pool
+	visitedListsLock   *sync.RWMutex
+	sparseVisitedLists *visitedPool
 
 	pqItemSlice  *sync.Pool
 	pqHeuristic  *pqMinWithIndexPool
@@ -35,8 +36,9 @@ type pools struct {
 
 func newPools(maxConnectionsLayerZero int) *pools {
 	return &pools{
-		visitedLists:     visited.NewPool(1, cache.InitialSize+500),
-		visitedListsLock: &sync.RWMutex{},
+		visitedLists:       visited.NewPool(1, cache.InitialSize+500),
+		visitedListsLock:   &sync.RWMutex{},
+		sparseVisitedLists: newVisitedPool(),
 		pqItemSlice: &sync.Pool{
 			New: func() interface{} {
 				return make([]priorityqueue.Item[uint64], 0, maxConnectionsLayerZero)
@@ -48,6 +50,29 @@ func newPools(maxConnectionsLayerZero int) *pools {
 		tempVectors:       common.NewTempVectorsPool(),
 		tempVectorsUint64: common.NewTempUint64VectorsPool(),
 	}
+}
+
+type visitedPool struct {
+	pool *sync.Pool
+}
+
+func newVisitedPool() *visitedPool {
+	return &visitedPool{
+		pool: &sync.Pool{
+			New: func() interface{} {
+				return visited.NewSparseSet(1_000_000, 8192)
+			},
+		},
+	}
+}
+
+func (vp *visitedPool) Get() *visited.SparseSet {
+	return vp.pool.Get().(*visited.SparseSet)
+}
+
+func (vp *visitedPool) Put(v *visited.SparseSet) {
+	v.Reset()
+	vp.pool.Put(v)
 }
 
 type pqMinPool struct {
