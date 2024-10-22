@@ -19,12 +19,14 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/fatih/camelcase"
 	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/entities/moduletools"
 	txt2vecmodels "github.com/weaviate/weaviate/modules/text2vec-contextionary/additional/models"
 	objectsvectorizer "github.com/weaviate/weaviate/usecases/modulecomponents/vectorizer"
+	"github.com/weaviate/weaviate/usecases/monitoring"
 )
 
 // Vectorizer turns objects into vectors
@@ -68,6 +70,14 @@ func New(client client) *Vectorizer {
 func (v *Vectorizer) Texts(ctx context.Context, inputs []string,
 	cfg moduletools.ClassConfig,
 ) ([]float32, error) {
+	// NOTE(kavi): hack. Currently this metrics is handled only for batch vectorizer.
+	// adding it here for demo purposes
+	start := time.Now()
+	defer func() {
+		monitoring.GetMetrics().T2VRequestDuration.WithLabelValues("text2vec-contextionary").
+			Observe(time.Since(start).Seconds())
+	}()
+
 	return v.Corpi(ctx, inputs)
 }
 

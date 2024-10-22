@@ -668,9 +668,10 @@ func newPrometheusMetrics() *PrometheusMetrics {
 			Buckets: sBuckets,
 		}, []string{"vectorizer", "operation"}),
 		T2VRequestDuration: promauto.NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "t2v_request_duration_seconds",
-			Help:    "Duration of an individual request to the vectorizer",
-			Buckets: sBuckets,
+			Namespace: "weaviate", // TODO(kavi): hack to get vectorizer metrics for demo
+			Name:      "t2v_request_duration_seconds",
+			Help:      "Duration of an individual request to the vectorizer",
+			Buckets:   sBuckets,
 		}, []string{"vectorizer"}),
 		T2VTokensInBatch: promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "t2v_tokens_in_batch",
