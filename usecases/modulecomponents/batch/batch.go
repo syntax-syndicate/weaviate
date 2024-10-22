@@ -406,7 +406,7 @@ func (b *Batch) sendBatch(job BatchJob, objCounter int, rateLimit *modulecompone
 func (b *Batch) makeRequest(job BatchJob, texts []string, cfg moduletools.ClassConfig, origIndex []int, rateLimit *modulecomponents.RateLimits, tokensInCurrentBatch int) error {
 	beforeRequest := time.Now()
 	defer func() {
-		monitoring.GetMetrics().T2VRequestDuration.WithLabelValues(b.label).
+		monitoring.GetMetrics().T2VRequestDuration.WithLabelValues(b.label, "ok").
 			Observe(time.Since(beforeRequest).Seconds())
 	}()
 

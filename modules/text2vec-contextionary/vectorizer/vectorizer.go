@@ -17,7 +17,9 @@ package vectorizer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -72,13 +74,26 @@ func (v *Vectorizer) Texts(ctx context.Context, inputs []string,
 ) ([]float32, error) {
 	// NOTE(kavi): hack. Currently this metrics is handled only for batch vectorizer.
 	// adding it here for demo purposes
+	var (
+		err  error
+		vals []float32
+	)
 	start := time.Now()
 	defer func() {
-		monitoring.GetMetrics().T2VRequestDuration.WithLabelValues("text2vec-contextionary").
+		status := "ok"
+		if err != nil {
+			status = "fail"
+		}
+		monitoring.GetMetrics().T2VRequestDuration.WithLabelValues("text2vec-contextionary", status).
 			Observe(time.Since(start).Seconds())
 	}()
 
-	return v.Corpi(ctx, inputs)
+	if os.Getenv("DEMO_VECTORIZE_ERROR") != "" {
+		return nil, errors.New("unable to access vectorizer")
+	}
+
+	vals, err = v.Corpi(ctx, inputs)
+	return vals, err
 }
 
 // Object object to vector

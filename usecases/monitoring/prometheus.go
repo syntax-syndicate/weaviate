@@ -672,7 +672,7 @@ func newPrometheusMetrics() *PrometheusMetrics {
 			Name:      "t2v_request_duration_seconds",
 			Help:      "Duration of an individual request to the vectorizer",
 			Buckets:   sBuckets,
-		}, []string{"vectorizer"}),
+		}, []string{"vectorizer", "status"}),
 		T2VTokensInBatch: promauto.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "t2v_tokens_in_batch",
 			Help:    "Number of tokens in a user-defined batch",
