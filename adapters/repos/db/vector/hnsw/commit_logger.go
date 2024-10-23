@@ -118,6 +118,7 @@ func getCommitFileNames(rootPath, name string) ([]string, error) {
 	}
 
 	files = removeTmpScratchOrHiddenFiles(files)
+	files = ignoreCheckpointFiles(files)
 	files, err = removeTmpCombiningFiles(dir, files)
 	if err != nil {
 		return nil, errors.Wrap(err, "remove temporary files")
@@ -165,6 +166,7 @@ func getCurrentCommitLogFileName(dirPath string) (string, bool, error) {
 	}
 
 	files = removeTmpScratchOrHiddenFiles(files)
+	files = ignoreCheckpointFiles(files)
 	files, err = removeTmpCombiningFiles(dirPath, files)
 	if err != nil {
 		return "", false, errors.Wrap(err, "clean up tmp combining files")
@@ -199,6 +201,21 @@ func removeTmpScratchOrHiddenFiles(in []os.DirEntry) []os.DirEntry {
 		}
 
 		if strings.HasPrefix(info.Name(), ".") {
+			continue
+		}
+
+		out[i] = info
+		i++
+	}
+
+	return out[:i]
+}
+
+func ignoreCheckpointFiles(in []os.DirEntry) []os.DirEntry {
+	out := make([]os.DirEntry, len(in))
+	i := 0
+	for _, info := range in {
+		if strings.HasSuffix(info.Name(), ".checkpoints") {
 			continue
 		}
 

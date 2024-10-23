@@ -14,6 +14,7 @@ package hnsw
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"time"
@@ -84,32 +85,43 @@ func (h *hnsw) restoreFromDisk() error {
 
 		defer fd.Close()
 
-		metered := diskio.NewMeteredReader(fd,
-			h.metrics.TrackStartupReadCommitlogDiskIO)
-		fdBuf := bufio.NewReaderSize(metered, 256*1024)
+		cp := hasCheckpoints(fileName)
+		fmt.Printf("file %s has checkpoints: %v\n", fileName, cp)
 
-		var valid int
-		state, valid, err = NewDeserializer(h.logger).Do(fdBuf, state, false)
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-				// we need to check for both EOF or UnexpectedEOF, as we don't know where
-				// the commit log got corrupted, a field ending that weset a longer
-				// encoding for would return EOF, whereas a field read with binary.Read
-				// with a fixed size would return UnexpectedEOF. From our perspective both
-				// are unexpected.
+		if cp {
+			// we can read multi-threaded
+			state, err = h.restoreCommitLogMultiThreaded(fd, fileName, state)
+			if err != nil {
+				return errors.Wrapf(err, "restore commit log (multi-threaded) %q", fileName)
+			}
+		} else {
+			metered := diskio.NewMeteredReader(fd,
+				h.metrics.TrackStartupReadCommitlogDiskIO)
+			fdBuf := bufio.NewReaderSize(metered, 256*1024)
 
-				h.logger.WithField("action", "hnsw_load_commit_log_corruption").
-					WithField("path", fileName).
-					Error("write-ahead-log ended abruptly, some elements may not have been recovered")
+			var valid int
+			state, valid, err = NewDeserializer(h.logger).Do(fdBuf, state, false)
+			if err != nil {
+				if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+					// we need to check for both EOF or UnexpectedEOF, as we don't know where
+					// the commit log got corrupted, a field ending that weset a longer
+					// encoding for would return EOF, whereas a field read with binary.Read
+					// with a fixed size would return UnexpectedEOF. From our perspective both
+					// are unexpected.
 
-				// we need to truncate the file to its valid length!
-				if err := os.Truncate(fileName, int64(valid)); err != nil {
-					return errors.Wrapf(err, "truncate corrupt commit log %q", fileName)
+					h.logger.WithField("action", "hnsw_load_commit_log_corruption").
+						WithField("path", fileName).
+						Error("write-ahead-log ended abruptly, some elements may not have been recovered")
+
+					// we need to truncate the file to its valid length!
+					if err := os.Truncate(fileName, int64(valid)); err != nil {
+						return errors.Wrapf(err, "truncate corrupt commit log %q", fileName)
+					}
+				} else {
+					// only return an actual error on non-EOF errors, otherwise we'll end
+					// up in a startup crashloop
+					return errors.Wrapf(err, "deserialize commit log %q", fileName)
 				}
-			} else {
-				// only return an actual error on non-EOF errors, otherwise we'll end
-				// up in a startup crashloop
-				return errors.Wrapf(err, "deserialize commit log %q", fileName)
 			}
 		}
 

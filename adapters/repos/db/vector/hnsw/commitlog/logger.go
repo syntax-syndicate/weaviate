@@ -65,8 +65,10 @@ func (l *Logger) SetEntryPointWithMaxLayer(id uint64, level int) error {
 	return err
 }
 
+const AddNodeSize = 11
+
 func (l *Logger) AddNode(id uint64, level int) error {
-	toWrite := make([]byte, 11)
+	toWrite := make([]byte, AddNodeSize)
 	toWrite[0] = byte(AddNode)
 	binary.LittleEndian.PutUint64(toWrite[1:9], id)
 	binary.LittleEndian.PutUint16(toWrite[9:11], uint16(level))

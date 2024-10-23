@@ -15,12 +15,14 @@ import (
 	"bufio"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"math"
 	"os"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/compressionhelpers"
+	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/commitlog"
 	"github.com/weaviate/weaviate/entities/errorcompounder"
 )
 
@@ -54,18 +56,36 @@ func (c *MemoryCondensor) Do(fileName string) error {
 
 	c.newLogFile = newLogFile
 
+	offset := 0
 	c.newLog = NewWriterSize(c.newLogFile, 1*1024*1024)
 
 	if res.Compressed {
-		if err := c.AddPQ(res.PQData); err != nil {
+		if n, err := c.AddPQ(res.PQData); err != nil {
 			return fmt.Errorf("write pq data: %w", err)
+		} else {
+			offset += n
 		}
 	}
 
+	fmt.Printf("begin offset finished AddNode %d\n", offset)
+
+	chunkSize := 100_000
+
+	nodesWritten := 0
+	maxNodeId := uint64(0)
+	var offsets []int
 	for _, node := range res.Nodes {
 		if node == nil {
 			// nil nodes occur when we've grown, but not inserted anything yet
 			continue
+		}
+
+		if nodesWritten%chunkSize == 0 {
+			offsets = append(offsets, offset)
+		}
+
+		if node.id > maxNodeId {
+			maxNodeId = node.id
 		}
 
 		if node.level > 0 {
@@ -74,23 +94,34 @@ func (c *MemoryCondensor) Do(fileName string) error {
 			// matter if it gets added explicitly or implicitly
 			if err := c.AddNode(node); err != nil {
 				return errors.Wrapf(err, "write node %d to commit log", node.id)
+			} else {
+				offset += commitlog.AddNodeSize
 			}
 		}
 
 		for level, links := range node.connections {
 			if res.ReplaceLinks(node.id, uint16(level)) {
-				if err := c.SetLinksAtLevel(node.id, level, links); err != nil {
+				if n, err := c.SetLinksAtLevel(node.id, level, links); err != nil {
 					return errors.Wrapf(err,
 						"write links for node %d at level %d to commit log", node.id, level)
+				} else {
+					offset += n
 				}
 			} else {
-				if err := c.AddLinksAtLevel(node.id, uint16(level), links); err != nil {
+				if n, err := c.AddLinksAtLevel(node.id, uint16(level), links); err != nil {
 					return errors.Wrapf(err,
 						"write links for node %d at level %d to commit log", node.id, level)
+				} else {
+					offset += n
 				}
 			}
 		}
+
+		nodesWritten++
 	}
+
+	offsets = append(offsets, offset)
+	fmt.Printf("final offset finished AddNode %d\n", offset)
 
 	if res.EntrypointChanged {
 		if err := c.SetEntryPointWithMaxLayer(res.Entrypoint,
@@ -136,6 +167,10 @@ func (c *MemoryCondensor) Do(fileName string) error {
 
 	if err := c.newLogFile.Close(); err != nil {
 		return errors.Wrap(err, "close new commit log")
+	}
+
+	if err := c.writeCheckpoints(fileName, maxNodeId, offsets); err != nil {
+		return errors.Wrap(err, "write checkpoints")
 	}
 
 	if err := os.Remove(fileName); err != nil {
@@ -207,11 +242,17 @@ func (c *MemoryCondensor) DeleteNode(id uint64) error {
 	return ec.ToError()
 }
 
-func (c *MemoryCondensor) SetLinksAtLevel(nodeid uint64, level int, targets []uint64) error {
+func (c *MemoryCondensor) SetLinksAtLevel(nodeid uint64, level int, targets []uint64) (int, error) {
+	n := 0
 	ec := &errorcompounder.ErrorCompounder{}
 	ec.Add(c.writeCommitType(c.newLog, ReplaceLinksAtLevel))
+	n += 1
+
 	ec.Add(c.writeUint64(c.newLog, nodeid))
+	n += 8
+
 	ec.Add(c.writeUint16(c.newLog, uint16(level)))
+	n += 2
 
 	targetLength := len(targets)
 	if targetLength > math.MaxUint16 {
@@ -223,12 +264,15 @@ func (c *MemoryCondensor) SetLinksAtLevel(nodeid uint64, level int, targets []ui
 			Warning("condensor length of connections would overflow uint16, cutting off")
 	}
 	ec.Add(c.writeUint16(c.newLog, uint16(targetLength)))
-	ec.Add(c.writeUint64Slice(c.newLog, targets[:targetLength]))
+	n += 2
 
-	return ec.ToError()
+	ec.Add(c.writeUint64Slice(c.newLog, targets[:targetLength]))
+	n += targetLength * 8
+
+	return n, ec.ToError()
 }
 
-func (c *MemoryCondensor) AddLinksAtLevel(nodeid uint64, level uint16, targets []uint64) error {
+func (c *MemoryCondensor) AddLinksAtLevel(nodeid uint64, level uint16, targets []uint64) (int, error) {
 	toWrite := make([]byte, 13+len(targets)*8)
 	toWrite[0] = byte(AddLinksAtLevel)
 	binary.LittleEndian.PutUint64(toWrite[1:9], nodeid)
@@ -239,8 +283,7 @@ func (c *MemoryCondensor) AddLinksAtLevel(nodeid uint64, level uint16, targets [
 		offsetEnd := offsetStart + 8
 		binary.LittleEndian.PutUint64(toWrite[offsetStart:offsetEnd], target)
 	}
-	_, err := c.newLog.Write(toWrite)
-	return err
+	return c.newLog.Write(toWrite)
 }
 
 func (c *MemoryCondensor) AddLinkAtLevel(nodeid uint64, level uint16, target uint64) error {
@@ -278,7 +321,7 @@ func (c *MemoryCondensor) RemoveTombstone(nodeid uint64) error {
 	return ec.ToError()
 }
 
-func (c *MemoryCondensor) AddPQ(data compressionhelpers.PQData) error {
+func (c *MemoryCondensor) AddPQ(data compressionhelpers.PQData) (int, error) {
 	toWrite := make([]byte, 10)
 	toWrite[0] = byte(AddPQ)
 	binary.LittleEndian.PutUint16(toWrite[1:3], data.Dimensions)
@@ -295,10 +338,39 @@ func (c *MemoryCondensor) AddPQ(data compressionhelpers.PQData) error {
 	for _, encoder := range data.Encoders {
 		toWrite = append(toWrite, encoder.ExposeDataForRestore()...)
 	}
-	_, err := c.newLog.Write(toWrite)
-	return err
+	return c.newLog.Write(toWrite)
 }
 
 func NewMemoryCondensor(logger logrus.FieldLogger) *MemoryCondensor {
 	return &MemoryCondensor{logger: logger}
+}
+
+func (c *MemoryCondensor) writeCheckpoints(
+	fileName string, maxNodeId uint64, checkpoints []int,
+) error {
+	checkpointFile, err := os.OpenFile(fmt.Sprintf("%s.checkpoints", fileName),
+		os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o666)
+	if err != nil {
+		return errors.Wrap(err, "open new checkpoint file for writing")
+	}
+	defer checkpointFile.Close()
+
+	// 0-4: checksum
+	// 4-12: max node id
+	// 12+: checkpoints (8 bytes each)
+	buffer := make([]byte, 4+8+len(checkpoints)*8)
+	offset := 4
+	binary.LittleEndian.PutUint64(buffer[offset:offset+8], maxNodeId)
+	offset += 8
+
+	for _, cp := range checkpoints {
+		binary.LittleEndian.PutUint64(buffer[offset:offset+8], uint64(cp))
+		offset += 8
+	}
+
+	checksum := crc32.ChecksumIEEE(buffer[4:])
+	binary.LittleEndian.PutUint32(buffer[0:4], checksum)
+
+	_, err = checkpointFile.Write(buffer)
+	return err
 }

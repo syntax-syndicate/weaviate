@@ -12,7 +12,6 @@
 package hnsw
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 	"math"
@@ -21,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/cache"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/compressionhelpers"
+	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/commitlog"
 )
 
 type Deserializer struct {
@@ -80,7 +80,7 @@ func (d *Deserializer) resetReusableConnectionsSlice(size int) {
 	}
 }
 
-func (d *Deserializer) Do(fd *bufio.Reader, initialState *DeserializationResult, keepLinkReplaceInformation bool) (*DeserializationResult, int, error) {
+func (d *Deserializer) Do(fd io.Reader, initialState *DeserializationResult, keepLinkReplaceInformation bool) (*DeserializationResult, int, error) {
 	validLength := 0
 	out := initialState
 	commitTypeMetrics := make(map[HnswCommitType]int)
@@ -107,7 +107,7 @@ func (d *Deserializer) Do(fd *bufio.Reader, initialState *DeserializationResult,
 		switch ct {
 		case AddNode:
 			err = d.ReadNode(fd, out)
-			readThisRound = 10
+			readThisRound = commitlog.AddNodeSize - 1
 		case SetEntryPointMaxLevel:
 			var entrypoint uint64
 			var level uint16
