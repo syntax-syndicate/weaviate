@@ -26,6 +26,7 @@ func (h *hnsw) restoreCommitLogMultiThreaded(fd *os.File, fileName string, state
 	}
 
 	if checkpoints[0] > 0 {
+		beforePQ := time.Now()
 		r := io.NewSectionReader(fd, 0, int64(checkpoints[0]))
 		var valid int
 		state, valid, err = NewDeserializer(h.logger).Do(r, state, false)
@@ -51,9 +52,8 @@ func (h *hnsw) restoreCommitLogMultiThreaded(fd *os.File, fileName string, state
 				return nil, errors.Wrapf(err, "deserialize commit log %q", fileName)
 			}
 		}
+		fmt.Printf("loaded PQ data single threaded in %s\n", time.Since(beforePQ))
 	}
-
-	fmt.Printf("loaded PQ data single threaded\n")
 
 	newNodes, changed, err := growIndexToAccomodateNode(state.Nodes, maxID, h.logger)
 	if err != nil {
@@ -64,6 +64,7 @@ func (h *hnsw) restoreCommitLogMultiThreaded(fd *os.File, fileName string, state
 		state.Nodes = newNodes
 	}
 
+	beforeNodes := time.Now()
 	eg := enterrors.NewErrorGroupWrapper(h.logger)
 	eg.SetLimit(2 * runtime.GOMAXPROCS(0))
 
@@ -114,7 +115,9 @@ func (h *hnsw) restoreCommitLogMultiThreaded(fd *os.File, fileName string, state
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	fmt.Printf("loaded nodes in %s\n", time.Since(beforeNodes))
 
+	beforeRemainder := time.Now()
 	fmt.Printf("read the remainder of the commit log to the end\n")
 	fd.Seek(int64(checkpoints[len(checkpoints)-1]), io.SeekStart)
 
@@ -145,6 +148,7 @@ func (h *hnsw) restoreCommitLogMultiThreaded(fd *os.File, fileName string, state
 			return nil, errors.Wrapf(err, "deserialize commit log %q", fileName)
 		}
 	}
+	fmt.Printf("loaded remainder in %s\n", time.Since(beforeRemainder))
 
 	return state, nil
 }
