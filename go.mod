@@ -30,6 +30,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/testcontainers/testcontainers-go v0.33.0
 	github.com/weaviate/contextionary v1.2.1
+	github.com/weaviate/hdf5 v0.0.0-20230911114900-3cd888ffadcd
 	github.com/willf/bloom v2.0.3+incompatible
 	go.etcd.io/bbolt v1.3.11
 	go.opentelemetry.io/otel v1.29.0 // indirect
@@ -60,11 +61,14 @@ require (
 	github.com/googleapis/gax-go/v2 v2.13.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/hashicorp/go-hclog v1.6.3
+	github.com/hashicorp/go-set/v3 v3.0.0
 	github.com/hashicorp/raft v1.7.1
 	github.com/hashicorp/raft-boltdb/v2 v2.3.0
 	github.com/ikawaha/kagome-dict-ko v0.2.1
 	github.com/ikawaha/kagome/v2 v2.9.11
 	github.com/johnbellone/grpc-middleware-sentry v0.4.0
+	github.com/muesli/clusters v0.0.0-20180605185049-a07a36e67d36
+	github.com/muesli/kmeans v0.3.1
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/prometheus/common v0.60.0
 	github.com/tailor-inc/graphql v0.4.1
@@ -211,4 +215,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-go 1.22
+go 1.23
+
+toolchain go1.23.2
