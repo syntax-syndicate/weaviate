@@ -1,60 +1,94 @@
 package diskann
 
 import (
-	"bytes"
 	"encoding/binary"
+	"math"
 	"os"
 	"syscall"
 )
 
-func WriteSegmentsToDisk(segments []*VamanaSegment, chunkSize int64, mf *MappedFile) error {
-
-	for i := range segments {
-		var neighbors []uint64
-		for _, neighbor := range segments[i].neighbors {
-			neighbors = append(neighbors, neighbor.id)
-		}
-		disk_segment := DiskSegment{id: segments[i].id, vector: segments[i].vector, neighbors: neighbors}
-
-		buf := new(bytes.Buffer)
-		err := binary.Write(buf, binary.LittleEndian, disk_segment)
-
-		if err != nil {
-			return err
-		}
-
-		data := buf.Bytes()
-
-		err = mf.Write(int64(i)*chunkSize, data)
-
-	}
-
-	return nil
-
+type DiskSegment struct {
+	Id        uint64
+	Vector    []float32
+	Neighbors []uint64
 }
 
-func ReadSegmentFromDisk(id uint64, chunkSize int64, mf *MappedFile) (DiskSegment, error) {
+var idSize = int64(8) // uint64 for ID
 
-	byteSegment, err := mf.Read(int64(id)*chunkSize, int(chunkSize))
+func WriteSegmentsToDisk(segments []*VamanaSegment, chunkSize int64, mf *MappedFile, vectorLenSize int64, neighborLenSize int64) error {
+	for i, segment := range segments {
+		offset := int64(i) * chunkSize
 
-	if err != nil {
-		return DiskSegment{}, err
+		// Write ID
+		binary.LittleEndian.PutUint64(mf.data[offset:], segment.id)
+		offset += idSize
+
+		// Write vector length
+		binary.LittleEndian.PutUint32(mf.data[offset:], uint32(len(segment.vector)))
+		offset += vectorLenSize
+
+		// Write vector data
+		for _, v := range segment.vector {
+			binary.LittleEndian.PutUint32(mf.data[offset:], math.Float32bits(v))
+			offset += 4
+		}
+
+		// Write neighbors length
+		binary.LittleEndian.PutUint32(mf.data[offset:], uint32(len(segment.neighbors)))
+		offset += neighborLenSize
+
+		// Write neighbors
+		for _, neighbor := range segment.neighbors {
+			binary.LittleEndian.PutUint64(mf.data[offset:], neighbor.id)
+			offset += 8
+		}
 	}
 
-	var disk_segment DiskSegment
-
-	buf := bytes.NewBuffer(byteSegment)
-
-	err = binary.Read(buf, binary.LittleEndian, &disk_segment)
-
-	if err != nil {
-		return DiskSegment{}, err
-	}
-
-	return disk_segment, nil
-
+	return mf.file.Sync()
 }
 
+func ReadSegmentFromDisk(id uint64, chunkSize int64, mf *MappedFile, vectorLenSize int64, neighborLenSize int64) (DiskSegment, error) {
+	offset := int64(id) * chunkSize
+
+	if offset+chunkSize > mf.size {
+		return DiskSegment{}, os.ErrInvalid
+	}
+
+	// Read ID
+	segmentId := binary.LittleEndian.Uint64(mf.data[offset:])
+	offset += idSize
+
+	// Read vector length
+	vectorLen := binary.LittleEndian.Uint32(mf.data[offset:])
+	offset += vectorLenSize
+
+	// Read vector
+	vector := make([]float32, vectorLen)
+	for i := range vector {
+		bits := binary.LittleEndian.Uint32(mf.data[offset:])
+		vector[i] = math.Float32frombits(bits)
+		offset += 4
+	}
+
+	// Read neighbors length
+	neighborLen := binary.LittleEndian.Uint32(mf.data[offset:])
+	offset += neighborLenSize
+
+	// Read neighbors
+	neighbors := make([]uint64, neighborLen)
+	for i := range neighbors {
+		neighbors[i] = binary.LittleEndian.Uint64(mf.data[offset:])
+		offset += 8
+	}
+
+	return DiskSegment{
+		Id:        segmentId,
+		Vector:    vector,
+		Neighbors: neighbors,
+	}, nil
+}
+
+// MappedFile structure remains the same
 type MappedFile struct {
 	data []byte
 	size int64

@@ -124,10 +124,10 @@ func LoadVectors(dataset *hdf5.Dataset) (float64, float64, DiskANNIndex) {
 	dimensions := dims[1]
 
 	// rows = uint(990_000)
-	rows = uint(10_000)
+	rows = uint(1000)
 
 	// batchSize := uint(990_000)
-	batchSize := uint(10_000)
+	batchSize := uint(1000)
 
 	memspace, err := hdf5.CreateSimpleDataspace([]uint{batchSize, dimensions}, []uint{batchSize, dimensions})
 	if err != nil {
@@ -180,16 +180,7 @@ func LoadVectors(dataset *hdf5.Dataset) (float64, float64, DiskANNIndex) {
 
 	}
 
-	chunkData_f64 := make([][]float64, batchSize)
-
-	for i, e := range chunkData {
-		chunkData_f64[i] = make([]float64, dimensions)
-		for j, f := range e {
-			chunkData_f64[i][j] = float64(f)
-		}
-	}
-
-	index := NewDiskANNIndex(chunkData_f64)
+	index := NewDiskANNIndex(chunkData, ids)
 
 	if err != nil {
 		panic(err)
@@ -232,11 +223,11 @@ func QueryVectors(index *DiskANNIndex, dataset *hdf5.Dataset, ideal_neighbors *h
 
 	K := 10
 
-	rows = uint(10_000)
+	rows = uint(1_000)
 	// rows = uint(5)
 
 	// batchSize := uint(30_000)
-	batchSize := uint(10_000)
+	batchSize := uint(1_000)
 	// batchSize := uint(5)
 
 	// Handle offsetting the data for product quantization
@@ -344,20 +335,6 @@ func QueryVectors(index *DiskANNIndex, dataset *hdf5.Dataset, ideal_neighbors *h
 
 		// for i := range chunkData {
 
-		for i := range chunkData {
-			for j := range chunkData[i] {
-
-				chunkData[i][j] = chunkData[i][j] * 0.146
-				// max := float32(31.99999)
-				// if chunkData[i][j] > max {
-				// 	chunkData[i][j] = max
-				// } else {
-				// 	chunkData[i][j] = chunkData[i][j] * 1.0
-				// }
-				// chunkData[i][j] = chunkData[i][j] * -1
-			}
-		}
-
 		ids := make([]uint64, batchSize)
 
 		for j := uint(0); j < batchSize; j++ {
@@ -365,28 +342,18 @@ func QueryVectors(index *DiskANNIndex, dataset *hdf5.Dataset, ideal_neighbors *h
 
 		}
 
-		var chunkData_f64 [][]float64
-		chunkData_f64 = make([][]float64, len(chunkData))
-		for i, e := range chunkData {
-			chunkData_f64[i] = make([]float64, len(e))
-			for j, f := range e {
-				chunkData_f64[i][j] = float64(f)
-			}
-		}
-
 		for k := range chunkData {
-			ids := index.Search(chunkData_f64[k], K)
-
+			ids_result := index.Search(chunkData[k], K)
 			ids_ideal := chunkData_ideal[k]
 
-			for j := range ids {
-				if ids[j] == uint64(ids_ideal[j]) {
+			for j := range ids_result {
+				// Convert the ID back to an index for comparison
+				resultIndex := ids_result[j] // This is already the index since you assigned IDs sequentially
+				println(resultIndex)
+				println(ids_ideal[j])
+				if resultIndex == uint64(ids_ideal[j]) {
 					numCorrect += 1
 				}
-			}
-			// r = r + 1
-			if err != nil {
-				panic(err)
 			}
 		}
 
