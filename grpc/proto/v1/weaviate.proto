@@ -12,7 +12,7 @@ option java_outer_classname = "WeaviateProto";
 
 service Weaviate {
   rpc Search(SearchRequest) returns (SearchReply) {
-    option idempotency_level = IDEMPOTENT;
+    option idempotency_level = NO_SIDE_EFFECTS;
   };
   rpc BatchObjects(BatchObjectsRequest) returns (BatchObjectsReply) {
     option idempotency_level = IDEMPOTENT;
