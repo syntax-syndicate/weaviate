@@ -11,7 +11,13 @@ option java_package = "io.weaviate.client.grpc.protocol.v1";
 option java_outer_classname = "WeaviateProto";
 
 service Weaviate {
-  rpc Search(SearchRequest) returns (SearchReply) {};
-  rpc BatchObjects(BatchObjectsRequest) returns (BatchObjectsReply) {};
-  rpc BatchDelete(BatchDeleteRequest) returns (BatchDeleteReply) {};
+  rpc Search(SearchRequest) returns (SearchReply) {
+    option idempotency_level = IDEMPOTENT;
+  };
+  rpc BatchObjects(BatchObjectsRequest) returns (BatchObjectsReply) {
+    option idempotency_level = IDEMPOTENT;
+  };
+  rpc BatchDelete(BatchDeleteRequest) returns (BatchDeleteReply) {
+    option idempotency_level = IDEMPOTENT;
+  };
 }
