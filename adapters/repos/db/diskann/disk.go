@@ -47,6 +47,41 @@ func WriteSegmentsToDisk(segments []*VamanaSegment, chunkSize int64, mf *MappedF
 	return mf.file.Sync()
 }
 
+func WriteSegmentToDisk(segment DiskSegment, chunkSize int64, mf *MappedFile, vectorLenSize int64, neighborLenSize int64) error {
+	offset := int64(segment.Id) * chunkSize
+
+	if offset+chunkSize > mf.size {
+		return os.ErrInvalid
+	}
+
+	// Write ID
+	binary.LittleEndian.PutUint64(mf.data[offset:], segment.Id)
+	offset += idSize
+
+	// Write vector length
+	binary.LittleEndian.PutUint32(mf.data[offset:], uint32(len(segment.Vector)))
+	offset += vectorLenSize
+
+	// Write vector data
+	for _, v := range segment.Vector {
+		binary.LittleEndian.PutUint32(mf.data[offset:], math.Float32bits(v))
+		offset += 4
+	}
+
+	// Write neighbors length
+	binary.LittleEndian.PutUint32(mf.data[offset:], uint32(len(segment.Neighbors)))
+	offset += neighborLenSize
+
+	// Write neighbors
+	for _, neighbor := range segment.Neighbors {
+		binary.LittleEndian.PutUint64(mf.data[offset:], neighbor)
+		offset += 8
+	}
+
+	return mf.file.Sync()
+
+}
+
 func ReadSegmentFromDisk(id uint64, chunkSize int64, mf *MappedFile, vectorLenSize int64, neighborLenSize int64) (DiskSegment, error) {
 	offset := int64(id) * chunkSize
 

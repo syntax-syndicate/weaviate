@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
-	"sync"
 
 	"github.com/hashicorp/go-set/v3"
 	"github.com/sirupsen/logrus/hooks/test"
@@ -23,13 +22,14 @@ type DiskANNIndex struct {
 	idsToExternalIds map[uint64]uint64
 	vectorLenSize    int64
 	neighborLenSize  int64
+	pq               *compressionhelpers.ProductQuantizer
 }
 
 func NewDiskANNIndex(vectors [][]float32, externalIds []uint64) DiskANNIndex {
 	var pqVectors []PQVector
 	var ids []uint64
 
-	pqvectors := makePQVectors(vectors)
+	pqvectors, pq := makePQVectors(vectors)
 
 	idsToExternalIds := make(map[uint64]uint64)
 
@@ -48,22 +48,25 @@ func NewDiskANNIndex(vectors [][]float32, externalIds []uint64) DiskANNIndex {
 	degreeBound := 128
 
 	neighborLenSize := int64(degreeBound * 8)
-
-	segments := BuildFinalGraph(ids, vectors, 2, degreeBound, 10)
-
 	chunkSize := CalculateAlignedChunkSize(len(vectors[0]), degreeBound)
+
+	index := DiskANNIndex{PqVectors: pqVectors, chunkSize: int64(chunkSize), idsToExternalIds: idsToExternalIds, vectorLenSize: vectorLenSize, neighborLenSize: neighborLenSize, pq: pq}
 
 	mf, err := NewMappedFile("test.bin", chunkSize*int64(len(vectors)))
 	if err != nil {
 		panic(err)
 	}
 
+	index.mf = mf
+	segments := index.BuildFinalGraph(ids, vectors, 2, degreeBound, 10)
+	index.medoid = findMedoidFast(segments, 100, 10)
+
 	err = WriteSegmentsToDisk(segments, int64(chunkSize), mf, vectorLenSize, neighborLenSize)
 	if err != nil {
 		panic(err)
 	}
 
-	return DiskANNIndex{PqVectors: pqVectors, mf: mf, medoid: findMedoidFast(segments, 100, 10), chunkSize: int64(chunkSize), idsToExternalIds: idsToExternalIds, vectorLenSize: vectorLenSize, neighborLenSize: neighborLenSize}
+	return index
 
 }
 
@@ -91,7 +94,7 @@ func CalculateAlignedChunkSize(vectorLen int, maxNeighbors int) int64 {
 // chunkSize := CalculateAlignedChunkSize(128, 64) // for 128-dim vectors and max 64 neighbors
 
 func (index *DiskANNIndex) Search(query []float32, k int) []uint64 {
-	results := index.BeamSearch(query, k, 50, 12, 4)
+	results := index.BeamSearch(query, k, 50, 8, 4)
 
 	results_external := make([]uint64, k)
 	for i, v := range results {
@@ -115,21 +118,18 @@ func vamanaToDiskSegment(segment VamanaSegment) DiskSegment {
 }
 
 func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int, beamWidth int, maxWorkers int) []uint64 {
-	results := set.NewTreeSet[*DiskSegment](compareDisk)
+	searchList := set.New[uint64](searchListSize + 50)
 	medoid := vamanaToDiskSegment(*index.medoid)
-	results.Insert(&medoid)
-	visited := set.NewTreeSet[*DiskSegment](compareDisk)
+	searchList.Insert(medoid.Id)
+	visited := set.New[uint64](100)
 
-	// Worker pool semaphore
-	sem := make(chan struct{}, maxWorkers)
-
-	for !results.Difference(visited).Empty() {
+	for !searchList.Difference(visited).Empty() {
 		// Get beamWidth closest unvisited points
-		unvisited := results.Difference(visited).Slice()
+		unvisited := searchList.Difference(visited).Slice()
 
-		slices.SortFunc(unvisited, func(i, j *DiskSegment) int {
-			distI := euclideanDistance(query, i.Vector)
-			distJ := euclideanDistance(query, j.Vector)
+		slices.SortFunc(unvisited, func(i, j uint64) int {
+			distI := index.L2FloatBytePureGo(query, index.PqVectors[i].vector)
+			distJ := index.L2FloatBytePureGo(query, index.PqVectors[j].vector)
 			if distI < distJ {
 				return -1
 			} else if distI > distJ {
@@ -138,67 +138,37 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 			return 0
 		})
 
-		beamPoints := unvisited
-		if len(beamPoints) > beamWidth {
-			beamPoints = beamPoints[:beamWidth]
+		if len(unvisited) > beamWidth {
+			unvisited = unvisited[:beamWidth]
 		}
 
-		// Channel to collect segments from parallel reads
-		segmentChan := make(chan *DiskSegment, beamWidth*len(beamPoints[0].Neighbors))
-		var wg sync.WaitGroup
+		unvisited_diskSegments := make([]DiskSegment, beamWidth)
 
-		// Process each beam point's neighbors in parallel
-		for _, p := range beamPoints {
-			// Sort neighbors by PQ distance
-			sortedNeighbors := slices.Clone(p.Neighbors)
-			slices.SortFunc(sortedNeighbors, func(i, j uint64) int {
-				distI := L2FloatBytePureGo(query, index.PqVectors[i].vector)
-				distJ := L2FloatBytePureGo(query, index.PqVectors[j].vector)
-				if distI < distJ {
-					return -1
-				}
-				if distI > distJ {
-					return 1
-				}
-				return 0
-			})
-
-			// Launch goroutines to read neighbors with worker pool
-			for _, neighborId := range sortedNeighbors {
-				wg.Add(1)
-				go func(id uint64) {
-					sem <- struct{}{} // Acquire worker
-					defer func() {
-						<-sem // Release worker
-						wg.Done()
-					}()
-
-					if segment, err := ReadSegmentFromDisk(id, index.chunkSize, index.mf, index.vectorLenSize, index.neighborLenSize); err == nil {
-						segmentChan <- &segment
-					}
-				}(neighborId)
+		for i, id := range unvisited {
+			if segment, err := ReadSegmentFromDisk(id, index.chunkSize, index.mf, index.vectorLenSize, index.neighborLenSize); err == nil {
+				unvisited_diskSegments[i] = segment
 			}
-			visited.Insert(p)
 		}
 
-		// Start a goroutine to close channel after all reads are done
-		go func() {
-			wg.Wait()
-			close(segmentChan)
-		}()
+		// Process segments and their neighbors
+		for _, segment := range unvisited_diskSegments {
+			visited.Insert(segment.Id)
 
-		// Collect results from channel
-		for segment := range segmentChan {
-			results.Insert(segment)
+			// Add all neighbors to search list
+			for _, neighborId := range segment.Neighbors {
+				if !visited.Contains(neighborId) {
+					searchList.Insert(neighborId)
+				}
+			}
 		}
 
 		// Prune results if necessary
-		if results.Size() > searchListSize {
-			newResults := results.Slice()
+		if searchList.Size() > searchListSize {
+			newResults := searchList.Slice()
 
-			slices.SortFunc(newResults, func(i, j *DiskSegment) int {
-				distI := euclideanDistance(query, i.Vector)
-				distJ := euclideanDistance(query, j.Vector)
+			slices.SortFunc(newResults, func(i, j uint64) int {
+				distI := index.L2FloatBytePureGo(query, index.PqVectors[i].vector)
+				distJ := index.L2FloatBytePureGo(query, index.PqVectors[j].vector)
 				if distI < distJ {
 					return -1
 				} else if distI > distJ {
@@ -206,36 +176,50 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 				}
 				return 0
 			})
-			results = set.TreeSetFrom(newResults[:searchListSize], compareDisk)
+			searchList = set.From(newResults[:searchListSize])
 		}
 	}
 
 	// Get final top k results
-	topKResults := results.Slice()
-	sort.Slice(topKResults, func(i, j int) bool {
-		return euclideanDistance(query, topKResults[i].Vector) < euclideanDistance(query, topKResults[j].Vector)
+	topKResults := searchList.Slice()
+	topKResults_diskSegments := make([]DiskSegment, 0, len(topKResults))
+
+	// Read ALL candidates
+	for _, id := range topKResults {
+		if segment, err := ReadSegmentFromDisk(id, index.chunkSize, index.mf, index.vectorLenSize, index.neighborLenSize); err == nil {
+			topKResults_diskSegments = append(topKResults_diskSegments, segment)
+		}
+	}
+
+	// Sort ALL candidates by exact distance
+	sort.Slice(topKResults_diskSegments, func(i, j int) bool {
+		return euclideanDistance(query, topKResults_diskSegments[i].Vector) < euclideanDistance(query, topKResults_diskSegments[j].Vector)
 	})
 
-	resultIds := make([]uint64, k)
-	for i, v := range topKResults[:k] {
-		resultIds[i] = v.Id
+	// Only now take top k
+	resultSize := min(k, len(topKResults_diskSegments))
+	resultIds := make([]uint64, resultSize)
+	for i := 0; i < resultSize; i++ {
+		resultIds[i] = topKResults_diskSegments[i].Id
 	}
 
 	return resultIds
 }
 
-func L2FloatBytePureGo(a []float32, b []byte) float32 {
+func (index *DiskANNIndex) L2FloatBytePureGo(a []float32, b []byte) float32 {
 	var sum float32
 
+	b_decoded := index.pq.Decode(b)
+
 	for i := range a {
-		diff := a[i] - float32(b[i])
+		diff := a[i] - b_decoded[i]
 		sum += diff * diff
 	}
 
 	return sum
 }
 
-func makePQVectors(vectors [][]float32) [][]byte {
+func makePQVectors(vectors [][]float32) ([][]byte, *compressionhelpers.ProductQuantizer) {
 
 	// make f32 version of vectors
 	vectors_f32 := make([][]float32, len(vectors))
@@ -273,7 +257,7 @@ func makePQVectors(vectors [][]float32) [][]byte {
 
 	println("pq")
 
-	return encoded
+	return encoded, pq
 
 }
 
@@ -393,7 +377,7 @@ func VamanaBuild(segments []*VamanaSegment, alpha float32, degreeBound int) {
 
 }
 
-func BuildFinalGraph(ids []uint64, vectors [][]float32, alpha float32, degreeBound int, k int) []*VamanaSegment {
+func (index *DiskANNIndex) BuildFinalGraph(ids []uint64, vectors [][]float32, alpha float32, degreeBound int, k int) []*VamanaSegment {
 
 	var segments []*VamanaSegment
 
@@ -403,74 +387,56 @@ func BuildFinalGraph(ids []uint64, vectors [][]float32, alpha float32, degreeBou
 	finalGraph := []*VamanaSegment{}
 
 	// split graph build if too large
-	if len(segments) >= 5_000 {
+	if len(segments) >= 5_00 {
 
-		_, clusterCenters := kMeans(segments, k)
+		kMeans := compressionhelpers.NewKMeans(k, len(segments[0].vector), 0)
 
-		println("split into clusters: ", len(clusterCenters))
+		kMeans.Fit(vectors)
+
+		println("split into clusters: ", k)
 
 		topN := 2
 
-		clusterSubgraphs := make([][]*VamanaSegment, len(clusterCenters))
+		clusterSubgraphs := make([][]*VamanaSegment, k)
 
 		for _, seg := range segments {
 
-			type ClusterCenterCurrent struct {
-				center []float32
-				id     int
-			}
+			clusterCenters := kMeans.NNearest(seg.vector, topN)
 
-			var clusterCenters_current []ClusterCenterCurrent
-
-			for i, cc := range clusterCenters {
-				clusterCenters_current = append(clusterCenters_current, ClusterCenterCurrent{center: cc, id: i})
-			}
-
-			sort.Slice(clusterCenters_current, func(i, j int) bool {
-				return euclideanDistance(seg.vector, clusterCenters[i]) < euclideanDistance(seg.vector, clusterCenters[j])
-			})
-
-			clusterCenters_current = clusterCenters_current[:topN]
-
-			for _, cc := range clusterCenters_current {
-				clusterSubgraphs[cc.id] = append(clusterSubgraphs[cc.id], seg)
+			for _, center := range clusterCenters {
+				clusterSubgraphs[center] = append(clusterSubgraphs[center], seg)
 			}
 
 		}
+
+		first := true
 
 		for _, ccSg := range clusterSubgraphs {
 			println("cluster size: ", len(ccSg))
 			VamanaBuild(ccSg, alpha, degreeBound)
-		}
-
-		// merge graphs
-		for _, ccSg := range clusterSubgraphs {
-			for _, seg := range ccSg {
-				found := false
-				for _, finalGraphSeg := range finalGraph {
-					// if already in final graph, merge neighbors
-					if finalGraphSeg.id == seg.id {
-						// Add all neighbors from seg to finalGraphSeg
-						for _, neighbor := range seg.neighbors {
-							if !slices.ContainsFunc(finalGraphSeg.neighbors, func(x *VamanaSegment) bool {
-								return x.id == neighbor.id
-							}) {
-								finalGraphSeg.neighbors = append(finalGraphSeg.neighbors, neighbor)
-							}
+			if first {
+				WriteSegmentsToDisk(ccSg, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
+				first = false
+			} else {
+				for _, seg := range ccSg {
+					ds, _ := ReadSegmentFromDisk(seg.id, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
+					fails before here in disk.go
+					for _, n := range seg.neighbors {
+						if !slices.Contains(ds.Neighbors, n.id) {
+							ds.Neighbors = append(ds.Neighbors, n.id)
 						}
-						found = true
-						break
 					}
-				}
-				if !found {
-					finalGraph = append(finalGraph, seg)
+					WriteSegmentToDisk(ds, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
 				}
 			}
 		}
+
 	} else {
 		VamanaBuild(segments, alpha, degreeBound)
 
 		finalGraph = segments
+
+		WriteSegmentsToDisk(finalGraph, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
 
 	}
 
