@@ -58,7 +58,7 @@ func NewDiskANNIndex(vectors [][]float32, externalIds []uint64) DiskANNIndex {
 	}
 
 	index.mf = mf
-	segments := index.BuildFinalGraph(ids, vectors, 2, degreeBound, 10)
+	segments := index.BuildFinalGraph(ids, vectors, 5, degreeBound, 10)
 	index.medoid = findMedoidFast(segments, 100, 10)
 
 	err = WriteSegmentsToDisk(segments, int64(chunkSize), mf, vectorLenSize, neighborLenSize)
@@ -94,7 +94,7 @@ func CalculateAlignedChunkSize(vectorLen int, maxNeighbors int) int64 {
 // chunkSize := CalculateAlignedChunkSize(128, 64) // for 128-dim vectors and max 64 neighbors
 
 func (index *DiskANNIndex) Search(query []float32, k int) []uint64 {
-	results := index.BeamSearch(query, k, 50, 8, 4)
+	results := index.BeamSearch(query, k, 20, 8, 4)
 
 	results_external := make([]uint64, k)
 	for i, v := range results {
@@ -298,7 +298,7 @@ func VamanaBuild(segments []*VamanaSegment, alpha float32, degreeBound int) {
 	for _, idx := range indices {
 		print("|")
 		p := segments[idx]
-		_, vP := greedySearch(startingNode, p.vector, 10, 100)
+		_, vP := greedySearch(startingNode, p.vector, 10, 30)
 		robustPrune(segments, p, vP, firstPassAlpha, degreeBound)
 
 		// Update backward edges immediately
@@ -330,7 +330,7 @@ func VamanaBuild(segments []*VamanaSegment, alpha float32, degreeBound int) {
 	for _, idx := range indices {
 		print("|")
 		p := segments[idx]
-		_, vP := greedySearch(startingNode, p.vector, 10, 100)
+		_, vP := greedySearch(startingNode, p.vector, 10, 30)
 		robustPrune(segments, p, vP, alpha, degreeBound)
 
 		// Update backward edges immediately
