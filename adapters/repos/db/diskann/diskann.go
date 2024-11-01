@@ -7,37 +7,35 @@ import (
 	"sort"
 
 	"github.com/hashicorp/go-set/v3"
-	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/compressionhelpers"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/distancer"
-
-	ent "github.com/weaviate/weaviate/entities/vectorindex/hnsw"
 )
 
 type DiskANNIndex struct {
-	PqVectors        []PQVector
+	PqVectors        []BQVector
 	mf               *MappedFile
 	medoid           *VamanaSegment
 	chunkSize        int64
 	idsToExternalIds map[uint64]uint64
 	vectorLenSize    int64
 	neighborLenSize  int64
-	pq               *compressionhelpers.ProductQuantizer
+	bq               *compressionhelpers.BinaryQuantizer
+	distancer        distancer.Provider
 }
 
 func NewDiskANNIndex(vectors [][]float32, externalIds []uint64) DiskANNIndex {
-	var pqVectors []PQVector
+	var bqVectors []BQVector
 	var ids []uint64
 
-	pqvectors, pq := makePQVectors(vectors)
+	bqvectors, bq, distancer := makeBQVectors(vectors)
 
 	idsToExternalIds := make(map[uint64]uint64)
 
 	vectorLenSize := int64(len(vectors[0]) * 4)
 
-	println("making pq vectors")
+	println("making bq vectors")
 	for i := range vectors {
-		pqVectors = append(pqVectors, PQVector{id: uint64(i), vector: pqvectors[i]})
+		bqVectors = append(bqVectors, BQVector{id: uint64(i), vector: bqvectors[i]})
 		ids = append(ids, uint64(i))
 		idsToExternalIds[uint64(i)] = externalIds[i]
 
@@ -50,7 +48,7 @@ func NewDiskANNIndex(vectors [][]float32, externalIds []uint64) DiskANNIndex {
 	neighborLenSize := int64(degreeBound * 8)
 	chunkSize := CalculateAlignedChunkSize(len(vectors[0]), degreeBound)
 
-	index := DiskANNIndex{PqVectors: pqVectors, chunkSize: int64(chunkSize), idsToExternalIds: idsToExternalIds, vectorLenSize: vectorLenSize, neighborLenSize: neighborLenSize, pq: pq}
+	index := DiskANNIndex{PqVectors: bqVectors, chunkSize: int64(chunkSize), idsToExternalIds: idsToExternalIds, vectorLenSize: vectorLenSize, neighborLenSize: neighborLenSize, bq: bq, distancer: distancer}
 
 	mf, err := NewMappedFile("test.bin", chunkSize*int64(len(vectors)))
 	if err != nil {
@@ -122,14 +120,15 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 	medoid := vamanaToDiskSegment(*index.medoid)
 	searchList.Insert(medoid.Id)
 	visited := set.New[uint64](100)
+	query_binary := index.bq.Encode(query)
 
 	for !searchList.Difference(visited).Empty() {
 		// Get beamWidth closest unvisited points
 		unvisited := searchList.Difference(visited).Slice()
 
 		slices.SortFunc(unvisited, func(i, j uint64) int {
-			distI := index.L2FloatBytePureGo(query, index.PqVectors[i].vector)
-			distJ := index.L2FloatBytePureGo(query, index.PqVectors[j].vector)
+			distI := index.L2FloatBytePureGo(query_binary, index.PqVectors[i].vector)
+			distJ := index.L2FloatBytePureGo(query_binary, index.PqVectors[j].vector)
 			if distI < distJ {
 				return -1
 			} else if distI > distJ {
@@ -167,8 +166,8 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 			newResults := searchList.Slice()
 
 			slices.SortFunc(newResults, func(i, j uint64) int {
-				distI := index.L2FloatBytePureGo(query, index.PqVectors[i].vector)
-				distJ := index.L2FloatBytePureGo(query, index.PqVectors[j].vector)
+				distI := index.L2FloatBytePureGo(query_binary, index.PqVectors[i].vector)
+				distJ := index.L2FloatBytePureGo(query_binary, index.PqVectors[j].vector)
 				if distI < distJ {
 					return -1
 				} else if distI > distJ {
@@ -206,64 +205,38 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 	return resultIds
 }
 
-func (index *DiskANNIndex) L2FloatBytePureGo(a []float32, b []byte) float32 {
+func (index *DiskANNIndex) L2FloatBytePureGo(a []uint64, b []uint64) float32 {
 	var sum float32
 
-	b_decoded := index.pq.Decode(b)
-
-	for i := range a {
-		diff := a[i] - b_decoded[i]
-		sum += diff * diff
-	}
+	sum, _ = index.bq.DistanceBetweenCompressedVectors(a, b)
 
 	return sum
 }
 
-func makePQVectors(vectors [][]float32) ([][]byte, *compressionhelpers.ProductQuantizer) {
+func makeBQVectors(vectors [][]float32) ([][]uint64, *compressionhelpers.BinaryQuantizer, distancer.Provider) {
 
-	// make f32 version of vectors
-	vectors_f32 := make([][]float32, len(vectors))
-	for i := range vectors {
-		vectors_f32[i] = make([]float32, len(vectors[i]))
-		for j := range vectors[i] {
-			vectors_f32[i][j] = float32(vectors[i][j])
-		}
-	}
-
-	dimensions := len(vectors[0])
-	cfg := ent.PQConfig{
-		Enabled: true,
-		Encoder: ent.PQEncoder{
-			Type:         ent.PQEncoderTypeKMeans,
-			Distribution: ent.PQEncoderDistributionLogNormal,
-		},
-		Centroids: 255,
-		Segments:  dimensions,
-	}
 	distanceProvider := distancer.NewL2SquaredProvider()
-	var logger, _ = test.NewNullLogger()
-	pq, _ := compressionhelpers.NewProductQuantizer(
-		cfg,
-		distanceProvider,
-		dimensions,
-		logger,
-	)
 
-	pq.Fit(vectors_f32)
-	encoded := make([][]byte, len(vectors))
+	bq := compressionhelpers.NewBinaryQuantizer(nil)
+
+	for i := range vectors {
+		vectors[i] = distancer.Normalize(vectors[i])
+
+	}
+	encoded := make([][]uint64, len(vectors))
 	for i := 0; i < len(vectors); i++ {
-		encoded[i] = pq.Encode(vectors_f32[i])
+		encoded[i] = bq.Encode(vectors[i])
 	}
 
-	println("pq")
+	println("bq")
 
-	return encoded, pq
+	return encoded, &bq, distanceProvider
 
 }
 
-type PQVector struct {
+type BQVector struct {
 	id     uint64
-	vector []byte
+	vector []uint64
 }
 
 type VamanaSegment struct {
@@ -387,7 +360,7 @@ func (index *DiskANNIndex) BuildFinalGraph(ids []uint64, vectors [][]float32, al
 	finalGraph := []*VamanaSegment{}
 
 	// split graph build if too large
-	if len(segments) >= 5_00 {
+	if len(segments) >= 5_000 {
 
 		kMeans := compressionhelpers.NewKMeans(k, len(segments[0].vector), 0)
 
@@ -420,7 +393,7 @@ func (index *DiskANNIndex) BuildFinalGraph(ids []uint64, vectors [][]float32, al
 			} else {
 				for _, seg := range ccSg {
 					ds, _ := ReadSegmentFromDisk(seg.id, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
-					fails before here in disk.go
+					// fails before here in disk.go
 					for _, n := range seg.neighbors {
 						if !slices.Contains(ds.Neighbors, n.id) {
 							ds.Neighbors = append(ds.Neighbors, n.id)
