@@ -88,7 +88,7 @@ func TestDiskANNRecall(t *testing.T) {
 	}
 	defer pprof.StopCPUProfile()
 	// Test parameters
-	numVectors := 1_000
+	numVectors := 5_000
 	dimensions := 128
 	k := 10 // top-k for search
 	numQueries := 1_00

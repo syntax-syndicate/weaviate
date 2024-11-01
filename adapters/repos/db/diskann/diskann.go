@@ -402,26 +402,35 @@ func (index *DiskANNIndex) BuildFinalGraph(ids []uint64, vectors [][]float32, al
 
 		}
 
-		first := true
+		// first := true
+
+		written := make(map[uint64]bool)
 
 		for _, ccSg := range clusterSubgraphs {
 			println("cluster size: ", len(ccSg))
 			VamanaBuild(ccSg, alpha, degreeBound)
-			if first {
-				WriteSegmentsToDisk(ccSg, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
-				first = false
-			} else {
-				for _, seg := range ccSg {
-					ds, _ := ReadSegmentFromDisk(seg.id, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
+			// if first {
+			// 	WriteSegmentsToDisk(ccSg, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
+			// first = false
+			// } else {
+			for _, seg := range ccSg {
+
+				var ds DiskSegment
+				if !written[seg.id] {
+					ds = vamanaToDiskSegment(*seg)
+					written[seg.id] = true
+				} else {
+					ds, _ = ReadSegmentFromDisk(seg.id, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
 					// fails before here in disk.go
 					for _, n := range seg.neighbors {
 						if !slices.Contains(ds.Neighbors, n.id) {
 							ds.Neighbors = append(ds.Neighbors, n.id)
 						}
 					}
-					WriteSegmentToDisk(ds, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
 				}
+				WriteSegmentToDisk(ds, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
 			}
+			// }
 		}
 
 	} else {
