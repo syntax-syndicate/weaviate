@@ -122,14 +122,15 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 	medoid := vamanaToDiskSegment(*index.medoid)
 	searchList.Insert(medoid.Id)
 	visited := set.New[uint64](100)
+	query_byte := index.pq.Encode(query)
 
 	for !searchList.Difference(visited).Empty() {
 		// Get beamWidth closest unvisited points
 		unvisited := searchList.Difference(visited).Slice()
 
 		slices.SortFunc(unvisited, func(i, j uint64) int {
-			distI := index.L2FloatBytePureGo(query, index.PqVectors[i].vector)
-			distJ := index.L2FloatBytePureGo(query, index.PqVectors[j].vector)
+			distI := index.L2FloatBytePureGo(query_byte, index.PqVectors[i].vector)
+			distJ := index.L2FloatBytePureGo(query_byte, index.PqVectors[j].vector)
 			if distI < distJ {
 				return -1
 			} else if distI > distJ {
@@ -167,8 +168,8 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 			newResults := searchList.Slice()
 
 			slices.SortFunc(newResults, func(i, j uint64) int {
-				distI := index.L2FloatBytePureGo(query, index.PqVectors[i].vector)
-				distJ := index.L2FloatBytePureGo(query, index.PqVectors[j].vector)
+				distI := index.L2FloatBytePureGo(query_byte, index.PqVectors[i].vector)
+				distJ := index.L2FloatBytePureGo(query_byte, index.PqVectors[j].vector)
 				if distI < distJ {
 					return -1
 				} else if distI > distJ {
@@ -184,14 +185,12 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 	topKResults := searchList.Slice()
 	topKResults_diskSegments := make([]DiskSegment, 0, len(topKResults))
 
-	// Read ALL candidates
 	for _, id := range topKResults {
 		if segment, err := ReadSegmentFromDisk(id, index.chunkSize, index.mf, index.vectorLenSize, index.neighborLenSize); err == nil {
 			topKResults_diskSegments = append(topKResults_diskSegments, segment)
 		}
 	}
 
-	// Sort ALL candidates by exact distance
 	sort.Slice(topKResults_diskSegments, func(i, j int) bool {
 		return euclideanDistance(query, topKResults_diskSegments[i].Vector) < euclideanDistance(query, topKResults_diskSegments[j].Vector)
 	})
@@ -206,15 +205,9 @@ func (index *DiskANNIndex) BeamSearch(query []float32, k int, searchListSize int
 	return resultIds
 }
 
-func (index *DiskANNIndex) L2FloatBytePureGo(a []float32, b []byte) float32 {
-	var sum float32
+func (index *DiskANNIndex) L2FloatBytePureGo(a []byte, b []byte) float32 {
 
-	b_decoded := index.pq.Decode(b)
-
-	for i := range a {
-		diff := a[i] - b_decoded[i]
-		sum += diff * diff
-	}
+	sum, _ := index.pq.DistanceBetweenCompressedVectors(a, b)
 
 	return sum
 }
@@ -387,7 +380,7 @@ func (index *DiskANNIndex) BuildFinalGraph(ids []uint64, vectors [][]float32, al
 	finalGraph := []*VamanaSegment{}
 
 	// split graph build if too large
-	if len(segments) >= 5_00 {
+	if len(segments) >= 5_000 {
 
 		kMeans := compressionhelpers.NewKMeans(k, len(segments[0].vector), 0)
 
@@ -420,7 +413,7 @@ func (index *DiskANNIndex) BuildFinalGraph(ids []uint64, vectors [][]float32, al
 			} else {
 				for _, seg := range ccSg {
 					ds, _ := ReadSegmentFromDisk(seg.id, int64(index.chunkSize), index.mf, index.vectorLenSize, index.neighborLenSize)
-					fails before here in disk.go
+					// fails before here in disk.go
 					for _, n := range seg.neighbors {
 						if !slices.Contains(ds.Neighbors, n.id) {
 							ds.Neighbors = append(ds.Neighbors, n.id)
