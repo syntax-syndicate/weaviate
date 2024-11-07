@@ -5275,10 +5275,10 @@ func init() {
           "type": "string",
           "enum": [
             "cluster",
-            "collections",
-            "objects",
-            "roles",
-            "tenants"
+            "collection",
+            "object",
+            "role",
+            "tenant"
           ]
         },
         "resources": {
@@ -11711,10 +11711,10 @@ func init() {
           "type": "string",
           "enum": [
             "cluster",
-            "collections",
-            "objects",
-            "roles",
-            "tenants"
+            "collection",
+            "object",
+            "role",
+            "tenant"
           ]
         },
         "resources": {

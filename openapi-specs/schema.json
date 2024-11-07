@@ -30,7 +30,7 @@
         "domain": {
           "type": "string",
           "description": "level of that permission",
-          "enum": ["cluster", "collections", "objects", "roles", "tenants"]
+          "enum": ["cluster", "collection", "object", "role", "tenant"]
         },
         "resources": {
           "type": "array",
