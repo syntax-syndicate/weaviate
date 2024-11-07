@@ -255,6 +255,13 @@ func (p *Parser) ParseClassUpdate(class, update *models.Class) (*models.Class, e
 		return nil, fmt.Errorf("validate sharding config: %w", err)
 	}
 
+	fmt.Printf("------------class.Properties\n")
+	mClass, _ := json.Marshal(class)
+	fmt.Printf("%v\n", string(mClass))
+	fmt.Printf("------------update.Properties\n")
+	uClass, _ := json.Marshal(update)
+	fmt.Printf("%v\n", string(uClass))
+	fmt.Printf("-----------------------------")
 	if !reflect.DeepEqual(class.Properties, update.Properties) {
 		return nil, errors.Errorf(
 			"properties cannot be updated through updating the class. Use the add " +
