@@ -38,6 +38,8 @@ func (s *Shard) initGeoProp(prop *models.Property) error {
 	},
 		s.cycleCallbacks.geoPropsCommitLoggerCallbacks,
 		s.cycleCallbacks.geoPropsTombstoneCleanupCallbacks,
+		s.cycleCallbacks.compactionCallbacks,
+		s.cycleCallbacks.flushCallbacks,
 	)
 	if err != nil {
 		return errors.Wrapf(err, "create geo index for prop %q", prop.Name)

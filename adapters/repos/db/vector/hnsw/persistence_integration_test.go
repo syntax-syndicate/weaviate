@@ -52,7 +52,8 @@ func TestHnswPersistence(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	for i, vec := range testVectors {
@@ -89,7 +90,8 @@ func TestHnswPersistence(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	t.Run("verify that the results match after rebuilding from disk",
@@ -121,7 +123,8 @@ func TestHnswPersistence_CorruptWAL(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	for i, vec := range testVectors {
@@ -193,7 +196,8 @@ func TestHnswPersistence_CorruptWAL(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	// the minor corruption (just one missing link) will most likely not render
@@ -227,7 +231,8 @@ func TestHnswPersistence_WithDeletion_WithoutTombstoneCleanup(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	for i, vec := range testVectors {
@@ -273,7 +278,8 @@ func TestHnswPersistence_WithDeletion_WithoutTombstoneCleanup(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	dumpIndex(secondIndex, "without_cleanup_after_rebuild")
@@ -305,7 +311,8 @@ func TestHnswPersistence_WithDeletion_WithTombstoneCleanup(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	for i, vec := range testVectors {
@@ -358,7 +365,8 @@ func TestHnswPersistence_WithDeletion_WithTombstoneCleanup(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 	dumpIndex(secondIndex, "with cleanup second index")
 
@@ -402,7 +410,8 @@ func TestHnswPersistence_WithDeletion_WithTombstoneCleanup(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	dumpIndex(thirdIndex)
@@ -441,7 +450,8 @@ func TestHnswPersistence_WithDeletion_WithTombstoneCleanup(t *testing.T) {
 	}, ent.UserConfig{
 		MaxConnections: 30,
 		EFConstruction: 60,
-	}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+	}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+		cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 	require.Nil(t, err)
 
 	t.Run("load from disk and try to insert again", func(t *testing.T) {

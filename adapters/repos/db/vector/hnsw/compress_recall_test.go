@@ -97,7 +97,8 @@ func Test_NoRaceCompressionRecall(t *testing.T) {
 				copy(container.Slice, vectors[int(id)])
 				return container.Slice, nil
 			},
-		}, uc, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+		}, uc, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+			cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 		init := time.Now()
 		compressionhelpers.Concurrently(logger, uint64(vectors_size), func(id uint64) {
 			index.Add(ctx, id, vectors[id])

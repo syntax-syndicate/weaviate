@@ -21,7 +21,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/weaviate/weaviate/adapters/repos/db/helpers"
 	enterrors "github.com/weaviate/weaviate/entities/errors"
 	entsentry "github.com/weaviate/weaviate/entities/sentry"
 
@@ -63,8 +62,7 @@ type Store struct {
 // disk, it is loaded, if the folder is empty a new store is initialized in
 // there.
 func New(dir, rootDir string, logger logrus.FieldLogger, metrics *Metrics,
-	shardCompactionCallbacks, shardCompactionAuxCallbacks,
-	shardFlushCallbacks cyclemanager.CycleCallbackGroup,
+	shardCompactionCallbacks, shardFlushCallbacks cyclemanager.CycleCallbackGroup,
 ) (*Store, error) {
 	s := &Store{
 		dir:           dir,
@@ -75,7 +73,7 @@ func New(dir, rootDir string, logger logrus.FieldLogger, metrics *Metrics,
 		logger:        logger,
 		metrics:       metrics,
 	}
-	s.initCycleCallbacks(shardCompactionCallbacks, shardCompactionAuxCallbacks, shardFlushCallbacks)
+	s.initCycleCallbacks(shardCompactionCallbacks, shardFlushCallbacks)
 
 	return s, s.init()
 }
@@ -182,15 +180,10 @@ func (s *Store) CreateOrLoadBucket(ctx context.Context, bucketName string,
 		return nil
 	}
 
-	compactionCallbacks := s.cycleCallbacks.compactionCallbacks
-	if bucketName == helpers.ObjectsBucketLSM && s.cycleCallbacks.compactionAuxCallbacks != nil {
-		compactionCallbacks = s.cycleCallbacks.compactionAuxCallbacks
-	}
-
 	// bucket can be concurrently loaded with another buckets but
 	// the same bucket will be loaded only once
 	b, err := s.bcreator.NewBucket(ctx, s.bucketDir(bucketName), s.rootDir, s.logger, s.metrics,
-		compactionCallbacks, s.cycleCallbacks.flushCallbacks, opts...)
+		s.cycleCallbacks.compactionCallbacks, s.cycleCallbacks.flushCallbacks, opts...)
 	if err != nil {
 		return err
 	}
@@ -385,13 +378,8 @@ func (s *Store) CreateBucket(ctx context.Context, bucketName string,
 		return errors.Wrapf(err, "failed removing bucket %s files", bucketName)
 	}
 
-	compactionCallbacks := s.cycleCallbacks.compactionCallbacks
-	if bucketName == helpers.ObjectsBucketLSM && s.cycleCallbacks.compactionAuxCallbacks != nil {
-		compactionCallbacks = s.cycleCallbacks.compactionAuxCallbacks
-	}
-
 	b, err := s.bcreator.NewBucket(ctx, bucketDir, s.rootDir, s.logger, s.metrics,
-		compactionCallbacks, s.cycleCallbacks.flushCallbacks, opts...)
+		s.cycleCallbacks.compactionCallbacks, s.cycleCallbacks.flushCallbacks, opts...)
 	if err != nil {
 		return err
 	}

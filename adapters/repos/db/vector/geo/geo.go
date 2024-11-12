@@ -58,7 +58,8 @@ type Config struct {
 }
 
 func NewIndex(config Config,
-	commitLogMaintenanceCallbacks, tombstoneCleanupCallbacks cyclemanager.CycleCallbackGroup,
+	commitLogMaintenanceCallbacks, tombstoneCleanupCallbacks,
+	compactionCallbacks, flushCallbacks cyclemanager.CycleCallbackGroup,
 ) (*Index, error) {
 	vi, err := hnsw.New(hnsw.Config{
 		VectorForIDThunk:      config.CoordinatesForID.VectorForID,
@@ -70,7 +71,7 @@ func NewIndex(config Config,
 		MaxConnections:         64,
 		EFConstruction:         128,
 		CleanupIntervalSeconds: hnswent.DefaultCleanupIntervalSeconds,
-	}, tombstoneCleanupCallbacks, nil)
+	}, tombstoneCleanupCallbacks, compactionCallbacks, flushCallbacks, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "underlying hnsw index")
 	}

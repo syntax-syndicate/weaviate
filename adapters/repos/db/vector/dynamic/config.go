@@ -26,18 +26,20 @@ import (
 )
 
 type Config struct {
-	ID                    string
-	TargetVector          string
-	Logger                logrus.FieldLogger
-	RootPath              string
-	ShardName             string
-	ClassName             string
-	PrometheusMetrics     *monitoring.PrometheusMetrics
-	VectorForIDThunk      common.VectorForID[float32]
-	TempVectorForIDThunk  common.TempVectorForID
-	DistanceProvider      distancer.Provider
-	MakeCommitLoggerThunk hnsw.MakeCommitLogger
-	TombstoneCallbacks    cyclemanager.CycleCallbackGroup
+	ID                       string
+	TargetVector             string
+	Logger                   logrus.FieldLogger
+	RootPath                 string
+	ShardName                string
+	ClassName                string
+	PrometheusMetrics        *monitoring.PrometheusMetrics
+	VectorForIDThunk         common.VectorForID[float32]
+	TempVectorForIDThunk     common.TempVectorForID
+	DistanceProvider         distancer.Provider
+	MakeCommitLoggerThunk    hnsw.MakeCommitLogger
+	TombstoneCallbacks       cyclemanager.CycleCallbackGroup
+	ShardCompactionCallbacks cyclemanager.CycleCallbackGroup
+	ShardFlushCallbacks      cyclemanager.CycleCallbackGroup
 }
 
 func (c Config) Validate() error {

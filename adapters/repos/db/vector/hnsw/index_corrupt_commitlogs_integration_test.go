@@ -68,7 +68,8 @@ func TestStartupWithCorruptCondenseFiles(t *testing.T) {
 			MaxConnections:         100,
 			EFConstruction:         100,
 			CleanupIntervalSeconds: 0,
-		}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+		}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+			cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 		require.Nil(t, err)
 		index = idx
 	})
@@ -119,7 +120,8 @@ func TestStartupWithCorruptCondenseFiles(t *testing.T) {
 			MaxConnections:         100,
 			EFConstruction:         100,
 			CleanupIntervalSeconds: 0,
-		}, cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
+		}, cyclemanager.NewCallbackGroupNoop(), cyclemanager.NewCallbackGroupNoop(),
+			cyclemanager.NewCallbackGroupNoop(), testinghelpers.NewDummyStore(t))
 		require.Nil(t, err)
 		index = idx
 	})
