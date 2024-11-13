@@ -18,7 +18,12 @@ type quantizerDistancer[T byte | uint64] interface {
 	DistanceToFloat(x []float32) (float32, error)
 }
 
+type GenericDistancer[T float32 | byte | uint64] interface {
+	SingleDist(a, b []T) (float32, error)
+}
+
 type quantizer[T byte | uint64] interface {
+	GenericDistancer[T]
 	DistanceBetweenCompressedVectors(x, y []T) (float32, error)
 	Encode(vec []float32) []T
 	NewQuantizerDistancer(a []float32) quantizerDistancer[T]
@@ -33,6 +38,18 @@ type quantizer[T byte | uint64] interface {
 	// slice something off of that buffer. If the buffer is too small, it will
 	// allocate a new buffer.
 	FromCompressedBytesWithSubsliceBuffer(compressed []byte, buffer *[]T) []T
+}
+
+func (bq *BinaryQuantizer) SingleDist(a, b []uint64) (float32, error) {
+	return bq.DistanceBetweenCompressedVectors(a, b)
+}
+
+func (pq *ProductQuantizer) SingleDist(a, b []byte) (float32, error) {
+	return pq.DistanceBetweenCompressedVectors(a, b)
+}
+
+func (sq *ScalarQuantizer) SingleDist(a, b []byte) (float32, error) {
+	return sq.DistanceBetweenCompressedVectors(a, b)
 }
 
 func (bq *BinaryQuantizer) PersistCompression(logger CommitLogger) {
