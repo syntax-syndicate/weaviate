@@ -200,7 +200,7 @@ func (s *Service) search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		return nil, fmt.Errorf("extract auth: %w", err)
 	}
 
-	scheme := s.schemaManager.GetSchemaSkipAuth()
+	schema := s.schemaManager.GetSchemaSkipAuth()
 	parser := NewParser(
 		req.Uses_127Api,
 		s.schemaManager.ReadOnlyClass,
@@ -227,7 +227,7 @@ func (s *Service) search(ctx context.Context, req *pb.SearchRequest) (*pb.Search
 		return nil, err
 	}
 
-	return replier.Search(res, before, searchParams, scheme)
+	return replier.Search(res, before, searchParams, schema)
 }
 
 func (s *Service) validateClassAndProperty(searchParams dto.GetParams) error {

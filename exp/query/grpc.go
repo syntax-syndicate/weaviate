@@ -13,12 +13,13 @@ package query
 
 import (
 	"context"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	v1 "github.com/weaviate/weaviate/adapters/handlers/grpc/v1"
 	"github.com/weaviate/weaviate/entities/filters"
 	"github.com/weaviate/weaviate/entities/models"
-	"github.com/weaviate/weaviate/grpc/generated/protocol/v1"
+	grpc "github.com/weaviate/weaviate/grpc/generated/protocol/v1"
 )
 
 // GRPC transport on top of the query.API.
@@ -30,7 +31,13 @@ type GRPC struct {
 	schema SchemaQuerier
 
 	// TODO(kavi): This should go away once we split v1.WeaviateServer into composable v1.Searcher
-	protocol.UnimplementedWeaviateServer
+	grpc.UnimplementedWeaviateServer
+
+	// parser decodes the search request
+	parser *v1.Parser
+
+	// encoder takes care of encoding the search responses
+	encoder *v1.Replier
 }
 
 func NewGRPC(api *API, schema SchemaQuerier, log logrus.FieldLogger) *GRPC {
@@ -41,7 +48,7 @@ func NewGRPC(api *API, schema SchemaQuerier, log logrus.FieldLogger) *GRPC {
 	}
 }
 
-func (g *GRPC) Search(ctx context.Context, req *protocol.SearchRequest) (*protocol.SearchReply, error) {
+func (g *GRPC) Search(ctx context.Context, req *grpc.SearchRequest) (*grpc.SearchReply, error) {
 	class, err := g.schema.Collection(ctx, req.Collection)
 	if err != nil {
 		return nil, err
@@ -62,10 +69,25 @@ func (g *GRPC) Search(ctx context.Context, req *protocol.SearchRequest) (*protoc
 		return nil, err
 	}
 
-	return toProtoResponse(res), nil
+	return g.encode(res), nil
 }
 
-func requestFromProto(req *protocol.SearchRequest, getClass func(string) *models.Class) (*SearchRequest, error) {
+func (g *GRPC) encodeResponse(res *SearchResponse, start time.Time) *grpc.SearchReply {
+	var resp grpc.SearchReply
+
+	objs := make([]interface{}, 0)
+
+	for _, r := range res.Results {
+		objs = append(objs, r.Obj.Object.Properties)
+	}
+
+	g.encoder.Search(objs, start)
+}
+
+func (g *GRPC) decodeRequest(req *grpc.SearchRequest) (*SearchRequest, error) {
+}
+
+func requestFromProto(req *grpc.SearchRequest, getClass func(string) *models.Class) (*SearchRequest, error) {
 	sr := &SearchRequest{
 		Collection: req.Collection,
 		Tenant:     req.Tenant,
@@ -87,29 +109,29 @@ func requestFromProto(req *protocol.SearchRequest, getClass func(string) *models
 	return sr, nil
 }
 
-func toProtoResponse(res *SearchResponse) *protocol.SearchReply {
-	var resp protocol.SearchReply
+func toProtoResponse(res *SearchResponse) *grpc.SearchReply {
+	var resp grpc.SearchReply
 
 	// TODO(kavi): copy rest of the fields accordingly.
 	for _, v := range res.Results {
-		props := protocol.Properties{
-			Fields: make(map[string]*protocol.Value),
+		props := grpc.Properties{
+			Fields: make(map[string]*grpc.Value),
 		}
 		objprops := v.Obj.Object.Properties.(map[string]interface{})
 		for prop, val := range objprops {
-			props.Fields[prop] = &protocol.Value{
-				Kind: &protocol.Value_StringValue{
+			props.Fields[prop] = &grpc.Value{
+				Kind: &grpc.Value_StringValue{
 					StringValue: val.(string),
 				},
 			}
 		}
 
-		resp.Results = append(resp.Results, &protocol.SearchResult{
-			Metadata: &protocol.MetadataResult{
+		resp.Results = append(resp.Results, &grpc.SearchResult{
+			Metadata: &grpc.MetadataResult{
 				Id:        v.Obj.ID().String(),
 				Certainty: float32(v.Certainty),
 			},
-			Properties: &protocol.PropertiesResult{
+			Properties: &grpc.PropertiesResult{
 				TargetCollection: v.Obj.Object.Class,
 				NonRefProps:      &props,
 			},
