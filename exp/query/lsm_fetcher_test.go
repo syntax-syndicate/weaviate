@@ -68,11 +68,11 @@ func TestLSMFetcher_withCache(t *testing.T) {
 
 	cases := []struct {
 		name                string
-		version             uint64
+		version             int64
 		expectedCacheHit    int
 		expectedUpstreamHit int
 		addTenant           bool
-		addTenantVersion    uint64
+		addTenantVersion    int64
 	}{
 		{
 			name:                "version-0 should always download from upstream",
@@ -159,7 +159,7 @@ func TestLSMFetcher_concurrentInflights(t *testing.T) {
 
 	testCollection := "test-collection"
 	testTenant := "test-tenant"
-	testVersion := uint64(23)
+	testVersion := int64(23)
 
 	var (
 		wg   sync.WaitGroup
@@ -225,7 +225,7 @@ func (m *mockCache) Tenant(collection, tenantID string) (*TenantCache, error) {
 	return tc, nil
 }
 
-func (m *mockCache) AddTenant(collection, tenantID string, version uint64) error {
+func (m *mockCache) AddTenant(collection, tenantID string, version int64) error {
 	tc := &TenantCache{
 		Collection: collection,
 		TenantID:   tenantID,

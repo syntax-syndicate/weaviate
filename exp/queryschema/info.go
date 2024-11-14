@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net/http"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/weaviate/weaviate/entities/models"
@@ -48,10 +47,10 @@ func NewSchemaInfo(addr, schemaPrefix string) *SchemaInfo {
 	}
 }
 
-func (t *SchemaInfo) TenantStatus(ctx context.Context, collection, tenant string) (string, uint64, error) {
-	respPayload := []Response{}
+func (t *SchemaInfo) TenantStatus(ctx context.Context, collection, tenant string) (string, int64, error) {
+	respPayload := Response{}
 
-	path := t.schemaPrefix + "/" + collection + "/tenants"
+	path := t.schemaPrefix + "/" + collection + "/tenants" + "/" + tenant
 	u := fmt.Sprintf("%s/%s", t.addr, path)
 
 	resp, err := t.client.Get(u)
@@ -65,21 +64,16 @@ func (t *SchemaInfo) TenantStatus(ctx context.Context, collection, tenant string
 	}
 
 	var rerr error
-	for _, v := range respPayload {
-		for _, e := range v.Error {
+	if resp.StatusCode/100 != 2 {
+		if len(respPayload.Error) == 0 {
+			return "", 0, errors.New("status code is non-200 but error is not set")
+		}
+		for _, e := range respPayload.Error {
 			rerr = errors.Join(rerr, errors.New(e.Message))
 		}
-		if strings.EqualFold(v.Name, tenant) {
-			return v.Status, 0, nil
-		}
-
-	}
-
-	if rerr != nil {
 		return "", 0, rerr
 	}
-
-	return "", 0, ErrTenantNotFound
+	return respPayload.Name, int64(respPayload.DataVersion), nil
 }
 
 // Collection returns details about single collection from the schema.
@@ -121,9 +115,10 @@ func (t *SchemaInfo) Collection(ctx context.Context, collection string) (*models
 }
 
 type Response struct {
-	Error  []ErrorResponse `json:"error,omitempty"`
-	Status string          `json:"activityStatus"`
-	Name   string          `json:"name"`
+	Error       []ErrorResponse `json:"error,omitempty"`
+	Status      string          `json:"activityStatus"`
+	Name        string          `json:"name"`
+	DataVersion int64           `json:"dataVersion"`
 }
 
 type ErrorResponse struct {
