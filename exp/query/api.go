@@ -87,6 +87,7 @@ func NewAPI(
 
 // Search serves vector search over the offloaded tenant on object storage.
 func (a *API) Search(ctx context.Context, req *SearchRequest) (*SearchResponse, error) {
+	fmt.Println("NATEE search")
 	info, tenantVersion, err := a.schema.TenantStatus(ctx, req.Collection, req.Tenant)
 	if err != nil {
 		return nil, err

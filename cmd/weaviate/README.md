@@ -16,7 +16,7 @@ tldr; use `cmd/weaviate-server` instead. This is experimental
 
 ```sh
 ### Start Weaviate core.
-export EXPERIMENTAL_METADATA_SERVER_ENABLED=true
+export EXPERIMENTAL_METADATA_SERVER_ENABLED=false
 ./tools/dev/restart_dev_environment.sh --prometheus --s3 --contextionary && ./tools/dev/run_dev_server.sh local-node-with-offload
 ```
 
@@ -25,7 +25,7 @@ This also starts other dependencies like `contextionary` (for vectorizing), `min
 ### Start Weaviate Querier
 
 ``` sh
-rm -rf /tmp/question
+rm -rf /tmp/question /tmp/weaviate
 # Note, you may want to delete the contents of weaviate-offload minio as well, something like (add --force if you're sure):
 # mc rm --recursive local/weaviate-offload/question
 
