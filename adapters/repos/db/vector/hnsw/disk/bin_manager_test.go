@@ -23,7 +23,7 @@ import (
 func TestBinManager(t *testing.T) {
 	t.Run("add keeps track of vectors in bin", func(t *testing.T) {
 		bm := disk.NewFloatBinManager(100, distancer.NewL2SquaredProvider())
-		assert.Nil(t, bm.Add(-1, 0, make([]float32, 4)))
+		assert.Nil(t, bm.Add(0, 0, make([]float32, 4)))
 		bin, err := bm.GetBinOfVector(0)
 		assert.Nil(t, err)
 		assert.Equal(t, int(0), bin)
@@ -37,7 +37,7 @@ func TestBinManager(t *testing.T) {
 
 	t.Run("error when wrong closestId", func(t *testing.T) {
 		bm := disk.NewFloatBinManager(100, distancer.NewL2SquaredProvider())
-		assert.Nil(t, bm.Add(-1, 0, make([]float32, 4)))
+		assert.Nil(t, bm.Add(0, 0, make([]float32, 4)))
 		bin, err := bm.GetBinOfVector(0)
 		assert.Nil(t, err)
 		assert.Equal(t, int(0), bin)

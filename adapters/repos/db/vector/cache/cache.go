@@ -19,15 +19,16 @@ import (
 const DefaultDeletionInterval = 3 * time.Second
 
 type Cache[T any] interface {
-	Get(ctx context.Context, id uint64) ([]T, error)
-	MultiGet(ctx context.Context, ids []uint64) ([][]T, []error)
+	Get(ctx context.Context, id uint64, callerId int) ([]T, error)
+	MultiGet(ctx context.Context, ids []uint64, callerId int) ([][]T, []error)
 	Len() int32
 	CountVectors() int64
 	Delete(ctx context.Context, id uint64)
 	Preload(id uint64, vec []T)
 	PreloadNoLock(id uint64, vec []T)
+	Connect(id, closestId uint64, vec []T)
 	SetSizeAndGrowNoLock(id uint64)
-	Prefetch(id uint64)
+	Prefetch(id uint64, callerId int)
 	Grow(size uint64)
 	Drop()
 	UpdateMaxSize(size int64)

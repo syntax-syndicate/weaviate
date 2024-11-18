@@ -234,12 +234,12 @@ func (s *Shard) objectByIndexID(ctx context.Context, indexID uint64, acceptDelet
 	return obj, nil
 }
 
-func (s *Shard) vectorByIndexID(ctx context.Context, indexID uint64, targetVector string) ([]float32, error) {
+func (s *Shard) vectorByIndexID(ctx context.Context, indexID uint64, targetVector string, callerId int) ([]float32, error) {
 	keyBuf := make([]byte, 8)
-	return s.readVectorByIndexIDIntoSlice(ctx, indexID, &common.VectorSlice{Buff8: keyBuf}, targetVector)
+	return s.readVectorByIndexIDIntoSlice(ctx, indexID, &common.VectorSlice{Buff8: keyBuf}, targetVector, callerId)
 }
 
-func (s *Shard) readVectorByIndexIDIntoSlice(ctx context.Context, indexID uint64, container *common.VectorSlice, targetVector string) ([]float32, error) {
+func (s *Shard) readVectorByIndexIDIntoSlice(ctx context.Context, indexID uint64, container *common.VectorSlice, targetVector string, callerId int) ([]float32, error) {
 	binary.LittleEndian.PutUint64(container.Buff8, indexID)
 
 	bytes, newBuff, err := s.store.Bucket(helpers.ObjectsBucketLSM).

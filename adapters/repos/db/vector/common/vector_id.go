@@ -30,27 +30,27 @@ type VectorUint64Slice struct {
 }
 
 type (
-	VectorForID[T float32 | byte | uint64] func(ctx context.Context, id uint64) ([]T, error)
-	TempVectorForID                        func(ctx context.Context, id uint64, container *VectorSlice) ([]float32, error)
-	MultiVectorForID                       func(ctx context.Context, ids []uint64) ([][]float32, []error)
+	VectorForID[T float32 | byte | uint64] func(ctx context.Context, id uint64, callerId int) ([]T, error)
+	TempVectorForID                        func(ctx context.Context, id uint64, container *VectorSlice, callerId int) ([]float32, error)
+	MultiVectorForID                       func(ctx context.Context, ids []uint64, callerId int) ([][]float32, []error)
 )
 
 type TargetVectorForID[T float32 | byte | uint64] struct {
 	TargetVector     string
-	VectorForIDThunk func(ctx context.Context, id uint64, targetVector string) ([]T, error)
+	VectorForIDThunk func(ctx context.Context, id uint64, targetVector string, callerId int) ([]T, error)
 }
 
-func (t TargetVectorForID[T]) VectorForID(ctx context.Context, id uint64) ([]T, error) {
-	return t.VectorForIDThunk(ctx, id, t.TargetVector)
+func (t TargetVectorForID[T]) VectorForID(ctx context.Context, id uint64, callerId int) ([]T, error) {
+	return t.VectorForIDThunk(ctx, id, t.TargetVector, callerId)
 }
 
 type TargetTempVectorForID struct {
 	TargetVector         string
-	TempVectorForIDThunk func(ctx context.Context, id uint64, container *VectorSlice, targetVector string) ([]float32, error)
+	TempVectorForIDThunk func(ctx context.Context, id uint64, container *VectorSlice, targetVector string, callerId int) ([]float32, error)
 }
 
-func (t TargetTempVectorForID) TempVectorForID(ctx context.Context, id uint64, container *VectorSlice) ([]float32, error) {
-	return t.TempVectorForIDThunk(ctx, id, container, t.TargetVector)
+func (t TargetTempVectorForID) TempVectorForID(ctx context.Context, id uint64, container *VectorSlice, callerId int) ([]float32, error) {
+	return t.TempVectorForIDThunk(ctx, id, container, t.TargetVector, callerId)
 }
 
 type TempVectorUint64Pool struct {

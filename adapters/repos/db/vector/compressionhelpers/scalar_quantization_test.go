@@ -93,7 +93,7 @@ func Test_NoRaceRandomSQDistanceFloatToByte(t *testing.T) {
 		ellapsed := time.Duration(0)
 		compressionhelpers.Concurrently(logger, uint64(len(queries)), func(i uint64) {
 			heap := priorityqueue.NewMax[any](k)
-			cd := sq.NewDistancer(queries[i])
+			cd := sq.NewDistancer(queries[i], 0)
 			for j := range xCompressed {
 				before := time.Now()
 				d, _ := cd.Distance(xCompressed[j])
@@ -149,7 +149,7 @@ func Test_NoRaceRandomSQDistanceByteToByte(t *testing.T) {
 		ellapsed := time.Duration(0)
 		compressionhelpers.Concurrently(logger, uint64(len(queries)), func(i uint64) {
 			heap := priorityqueue.NewMax[any](k)
-			cd := sq.NewCompressedQuantizerDistancer(sq.Encode(queries[i]))
+			cd := sq.NewCompressedQuantizerDistancer(sq.Encode(queries[i]), 0)
 			for j := range xCompressed {
 				before := time.Now()
 				d, _ := cd.Distance(xCompressed[j])

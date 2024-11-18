@@ -78,7 +78,7 @@ func (h *hnsw) selectNeighborsHeuristic(input *priorityqueue.Queue[any],
 		}
 	} else {
 
-		vecs, errs := h.multiVectorForID(context.TODO(), ids)
+		vecs, errs := h.multiVectorForID(context.TODO(), ids, 0)
 
 		returnList = h.pools.pqItemSlice.Get().([]priorityqueue.Item[uint64])
 

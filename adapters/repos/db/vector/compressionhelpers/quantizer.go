@@ -16,6 +16,7 @@ import "encoding/binary"
 type quantizerDistancer[T byte | uint64] interface {
 	Distance(x []T) (float32, error)
 	DistanceToFloat(x []float32) (float32, error)
+	GetCallerId() int
 }
 
 type GenericDistancer[T float32 | byte | uint64] interface {
@@ -26,8 +27,8 @@ type quantizer[T byte | uint64] interface {
 	GenericDistancer[T]
 	DistanceBetweenCompressedVectors(x, y []T) (float32, error)
 	Encode(vec []float32) []T
-	NewQuantizerDistancer(a []float32) quantizerDistancer[T]
-	NewCompressedQuantizerDistancer(a []T) quantizerDistancer[T]
+	NewQuantizerDistancer(a []float32, callerId int) quantizerDistancer[T]
+	NewCompressedQuantizerDistancer(a []T, callerId int) quantizerDistancer[T]
 	ReturnQuantizerDistancer(distancer quantizerDistancer[T])
 	CompressedBytes(compressed []T) []byte
 	FromCompressedBytes(compressed []byte) []T
@@ -55,8 +56,8 @@ func (sq *ScalarQuantizer) SingleDist(a, b []byte) (float32, error) {
 func (bq *BinaryQuantizer) PersistCompression(logger CommitLogger) {
 }
 
-func (pq *ProductQuantizer) NewQuantizerDistancer(vec []float32) quantizerDistancer[byte] {
-	return pq.NewDistancer(vec)
+func (pq *ProductQuantizer) NewQuantizerDistancer(vec []float32, callerId int) quantizerDistancer[byte] {
+	return pq.NewDistancer(vec, callerId)
 }
 
 func (pq *ProductQuantizer) ReturnQuantizerDistancer(distancer quantizerDistancer[byte]) {
@@ -137,21 +138,24 @@ type BQDistancer struct {
 	x          []float32
 	bq         *BinaryQuantizer
 	compressed []uint64
+	callerId   int
 }
 
-func (bq *BinaryQuantizer) NewDistancer(a []float32) *BQDistancer {
+func (bq *BinaryQuantizer) NewDistancer(a []float32, callerId int) *BQDistancer {
 	return &BQDistancer{
 		x:          a,
 		bq:         bq,
 		compressed: bq.Encode(a),
+		callerId:   callerId,
 	}
 }
 
-func (bq *BinaryQuantizer) NewCompressedQuantizerDistancer(a []uint64) quantizerDistancer[uint64] {
+func (bq *BinaryQuantizer) NewCompressedQuantizerDistancer(a []uint64, callerId int) quantizerDistancer[uint64] {
 	return &BQDistancer{
 		x:          nil,
 		bq:         bq,
 		compressed: a,
+		callerId:   callerId,
 	}
 }
 
@@ -167,8 +171,12 @@ func (d *BQDistancer) DistanceToFloat(x []float32) (float32, error) {
 	return d.bq.DistanceBetweenCompressedVectors(d.compressed, xComp)
 }
 
-func (bq *BinaryQuantizer) NewQuantizerDistancer(vec []float32) quantizerDistancer[uint64] {
-	return bq.NewDistancer(vec)
+func (d *BQDistancer) GetCallerId() int {
+	return d.callerId
+}
+
+func (bq *BinaryQuantizer) NewQuantizerDistancer(vec []float32, callerId int) quantizerDistancer[uint64] {
+	return bq.NewDistancer(vec, callerId)
 }
 
 func (bq *BinaryQuantizer) ReturnQuantizerDistancer(distancer quantizerDistancer[uint64]) {}

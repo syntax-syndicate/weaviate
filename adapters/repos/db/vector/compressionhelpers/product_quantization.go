@@ -315,24 +315,27 @@ type PQDistancer struct {
 	pq         *ProductQuantizer
 	lut        *DistanceLookUpTable
 	compressed []byte
+	callerId   int
 }
 
-func (pq *ProductQuantizer) NewDistancer(a []float32) *PQDistancer {
+func (pq *ProductQuantizer) NewDistancer(a []float32, callerId int) *PQDistancer {
 	lut := pq.CenterAt(a)
 	return &PQDistancer{
 		x:          a,
 		pq:         pq,
 		lut:        lut,
 		compressed: nil,
+		callerId:   callerId,
 	}
 }
 
-func (pq *ProductQuantizer) NewCompressedQuantizerDistancer(a []byte) quantizerDistancer[byte] {
+func (pq *ProductQuantizer) NewCompressedQuantizerDistancer(a []byte, callerId int) quantizerDistancer[byte] {
 	return &PQDistancer{
 		x:          nil,
 		pq:         pq,
 		lut:        nil,
 		compressed: a,
+		callerId:   callerId,
 	}
 }
 
@@ -356,6 +359,10 @@ func (d *PQDistancer) DistanceToFloat(x []float32) (float32, error) {
 	}
 	xComp := d.pq.Encode(x)
 	return d.pq.DistanceBetweenCompressedVectors(d.compressed, xComp)
+}
+
+func (d *PQDistancer) GetCallerId() int {
+	return d.callerId
 }
 
 func (pq *ProductQuantizer) Fit(data [][]float32) error {

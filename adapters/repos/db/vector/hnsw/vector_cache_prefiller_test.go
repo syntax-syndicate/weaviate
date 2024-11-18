@@ -83,11 +83,11 @@ type fakeCache struct {
 	store map[uint64]struct{}
 }
 
-func (f *fakeCache) MultiGet(ctx context.Context, id []uint64) ([][]float32, []error) {
+func (f *fakeCache) MultiGet(ctx context.Context, id []uint64, callerId int) ([][]float32, []error) {
 	panic("not implemented")
 }
 
-func (f *fakeCache) Get(ctx context.Context, id uint64) ([]float32, error) {
+func (f *fakeCache) Get(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 	f.store[id] = struct{}{}
 	return nil, nil
 }
@@ -104,9 +104,11 @@ func (f *fakeCache) PreloadNoLock(id uint64, vec []float32) {
 	panic("not implemented")
 }
 
-func (f *fakeCache) Prefetch(id uint64) {
+func (f *fakeCache) Prefetch(id uint64, callerId int) {
 	panic("not implemented")
 }
+
+func (f *fakeCache) Connect(uint64, uint64, []float32) {}
 
 func (f *fakeCache) Grow(id uint64) {
 	panic("not implemented")

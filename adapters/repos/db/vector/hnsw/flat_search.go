@@ -33,7 +33,7 @@ func (h *hnsw) flatSearch(queryVector []float32, k, limit int,
 
 	var compressorDistancer compressionhelpers.CompressorDistancer
 	if h.compressed.Load() {
-		distancer, returnFn := h.compressor.NewDistancer(queryVector)
+		distancer, returnFn := h.compressor.NewDistancer(queryVector, 0)
 		defer returnFn()
 		compressorDistancer = distancer
 	}
@@ -57,7 +57,7 @@ func (h *hnsw) flatSearch(queryVector []float32, k, limit int,
 			continue
 		}
 
-		dist, err := h.distToNode(compressorDistancer, candidate, queryVector)
+		dist, err := h.distToNode(compressorDistancer, candidate, queryVector, 0)
 		var e storobj.ErrNotFound
 		if errors.As(err, &e) {
 			h.handleDeletedNode(e.DocID, "flatSearch")
@@ -76,7 +76,7 @@ func (h *hnsw) flatSearch(queryVector []float32, k, limit int,
 	}
 
 	if h.shouldRescore() {
-		compressorDistancer, fn := h.compressor.NewDistancer(queryVector)
+		compressorDistancer, fn := h.compressor.NewDistancer(queryVector, 0)
 		h.rescore(results, k, compressorDistancer)
 		fn()
 	}

@@ -141,9 +141,10 @@ type SQDistancer struct {
 	x          []float32
 	sq         *ScalarQuantizer
 	compressed []byte
+	callerId   int
 }
 
-func (sq *ScalarQuantizer) NewDistancer(a []float32) *SQDistancer {
+func (sq *ScalarQuantizer) NewDistancer(a []float32, callerId int) *SQDistancer {
 	sum := float32(0)
 	sum2 := float32(0)
 	for _, x := range a {
@@ -154,6 +155,7 @@ func (sq *ScalarQuantizer) NewDistancer(a []float32) *SQDistancer {
 		x:          a,
 		sq:         sq,
 		compressed: sq.Encode(a),
+		callerId:   callerId,
 	}
 }
 
@@ -169,15 +171,20 @@ func (d *SQDistancer) DistanceToFloat(x []float32) (float32, error) {
 	return d.sq.DistanceBetweenCompressedVectors(d.compressed, xComp)
 }
 
-func (sq *ScalarQuantizer) NewQuantizerDistancer(a []float32) quantizerDistancer[byte] {
-	return sq.NewDistancer(a)
+func (d *SQDistancer) GetCallerId() int {
+	return d.callerId
 }
 
-func (sq *ScalarQuantizer) NewCompressedQuantizerDistancer(a []byte) quantizerDistancer[byte] {
+func (sq *ScalarQuantizer) NewQuantizerDistancer(a []float32, callerId int) quantizerDistancer[byte] {
+	return sq.NewDistancer(a, callerId)
+}
+
+func (sq *ScalarQuantizer) NewCompressedQuantizerDistancer(a []byte, callerId int) quantizerDistancer[byte] {
 	return &SQDistancer{
 		x:          nil,
 		sq:         sq,
 		compressed: a,
+		callerId:   callerId,
 	}
 }
 

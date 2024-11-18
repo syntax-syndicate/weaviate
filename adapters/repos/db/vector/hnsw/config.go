@@ -71,7 +71,7 @@ func (c Config) Validate() error {
 	return ec.ToError()
 }
 
-func NewVectorForIDThunk(targetVector string, fn func(ctx context.Context, id uint64, targetVector string) ([]float32, error)) common.VectorForID[float32] {
+func NewVectorForIDThunk(targetVector string, fn func(ctx context.Context, id uint64, targetVector string, callerId int) ([]float32, error)) common.VectorForID[float32] {
 	t := common.TargetVectorForID[float32]{
 		TargetVector:     targetVector,
 		VectorForIDThunk: fn,
@@ -79,7 +79,7 @@ func NewVectorForIDThunk(targetVector string, fn func(ctx context.Context, id ui
 	return t.VectorForID
 }
 
-func NewTempVectorForIDThunk(targetVector string, fn func(ctx context.Context, indexID uint64, container *common.VectorSlice, targetVector string) ([]float32, error)) common.TempVectorForID {
+func NewTempVectorForIDThunk(targetVector string, fn func(ctx context.Context, indexID uint64, container *common.VectorSlice, targetVector string, callerId int) ([]float32, error)) common.TempVectorForID {
 	t := common.TargetTempVectorForID{
 		TargetVector:         targetVector,
 		TempVectorForIDThunk: fn,

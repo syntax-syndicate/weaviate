@@ -34,8 +34,8 @@ import (
 	ent "github.com/weaviate/weaviate/entities/vectorindex/hnsw"
 )
 
-func TempVectorForIDThunk(vectors [][]float32) func(context.Context, uint64, *common.VectorSlice) ([]float32, error) {
-	return func(ctx context.Context, id uint64, container *common.VectorSlice) ([]float32, error) {
+func TempVectorForIDThunk(vectors [][]float32) func(context.Context, uint64, *common.VectorSlice, int) ([]float32, error) {
+	return func(ctx context.Context, id uint64, container *common.VectorSlice, callerId int) ([]float32, error) {
 		copy(container.Slice, vectors[int(id)])
 		return vectors[int(id)], nil
 	}
@@ -54,7 +54,7 @@ func TestDelete_WithoutCleaningUpTombstones(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -148,7 +148,7 @@ func TestDelete_WithCleaningUpTombstonesOnce(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -267,7 +267,7 @@ func TestDelete_WithCleaningUpTombstonesTwiceConcurrently(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -367,7 +367,7 @@ func TestDelete_WithConcurrentEntrypointDeletionAndTombstoneCleanup(t *testing.T
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -454,7 +454,7 @@ func TestDelete_WithCleaningUpTombstonesInBetween(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -577,7 +577,7 @@ func createIndexImportAllVectorsAndDeleteEven(t *testing.T, vectors [][]float32,
 		ID:                    "delete-test",
 		MakeCommitLoggerThunk: MakeNoopCommitLogger,
 		DistanceProvider:      distancer.NewCosineDistanceProvider(),
-		VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+		VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 			return vectors[int(id)], nil
 		},
 		TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -805,7 +805,7 @@ func TestDelete_InCompressedIndex_WithCleaningUpTombstonesOnce(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				if int(id) >= len(vectors) {
 					return nil, storobj.NewErrNotFoundf(id, "out of range")
 				}
@@ -953,7 +953,7 @@ func TestDelete_ResetLockDoesNotLockForever(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				if int(id) >= len(vectors) {
 					return nil, storobj.NewErrNotFoundf(id, "out of range")
 				}
@@ -1052,7 +1052,7 @@ func TestDelete_InCompressedIndex_WithCleaningUpTombstonesOnce_DoesNotCrash(t *t
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id%uint64(len(vectors)))], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -1366,7 +1366,7 @@ func TestDelete_MoreEntrypointIssues(t *testing.T) {
 		{6.5, -1},
 	}
 
-	vecForID := func(ctx context.Context, id uint64) ([]float32, error) {
+	vecForID := func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 		return vectors[int(id)], nil
 	}
 	// This test is motivated by flakyness of other tests. We seemed to have
@@ -1437,7 +1437,7 @@ func TestDelete_MoreEntrypointIssues(t *testing.T) {
 
 	dumpIndex(index, "before adding another element")
 	t.Run("adding a third element", func(t *testing.T) {
-		vec, _ := testVectorForID(context.TODO(), 3)
+		vec, _ := testVectorForID(context.TODO(), 3, 0)
 		index.Add(ctx, 3, vec)
 	})
 
@@ -1459,7 +1459,7 @@ func TestDelete_MoreEntrypointIssues(t *testing.T) {
 
 func TestDelete_TombstonedEntrypoint(t *testing.T) {
 	ctx := context.Background()
-	vecForID := func(ctx context.Context, id uint64) ([]float32, error) {
+	vecForID := func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 		// always return same vec  for all elements
 		return []float32{0.1, 0.2}, nil
 	}
@@ -1507,7 +1507,7 @@ func TestDelete_Flakyness_gh_1369(t *testing.T) {
 `)
 
 	vectors := vectorsForDeleteTest()
-	vecForID := func(ctx context.Context, id uint64) ([]float32, error) {
+	vecForID := func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 		return vectors[int(id)], nil
 	}
 
@@ -1649,7 +1649,7 @@ func Test_DeleteEPVecInUnderlyingObjectStore(t *testing.T) {
 			ID:                    "delete-ep-in-underlying-store-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewL2SquaredProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				fmt.Printf("vec for pos=%d is %v\n", id, vectors[int(id)])
 				return vectors[int(id)], vectorErrors[int(id)]
 			},
@@ -1705,7 +1705,7 @@ func TestDelete_WithCleaningUpTombstonesOncePreservesMaxConnections(t *testing.T
 		ID:                    "delete-test",
 		MakeCommitLoggerThunk: MakeNoopCommitLogger,
 		DistanceProvider:      distancer.NewCosineDistanceProvider(),
-		VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+		VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 			return vectors[int(id)], nil
 		},
 		TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -1777,7 +1777,7 @@ func TestDelete_WithCleaningUpTombstonesOnceRemovesAllRelatedConnections(t *test
 		ID:                    "delete-test",
 		MakeCommitLoggerThunk: MakeNoopCommitLogger,
 		DistanceProvider:      distancer.NewCosineDistanceProvider(),
-		VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+		VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 			return vectors[int(id)], nil
 		},
 		TempVectorForIDThunk: TempVectorForIDThunk(vectors),
@@ -1847,7 +1847,7 @@ func TestDelete_WithCleaningUpTombstonesWithHighConcurrency(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),

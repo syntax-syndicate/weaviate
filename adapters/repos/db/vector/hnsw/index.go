@@ -234,6 +234,7 @@ func New(cfg Config, uc ent.UserConfig, tombstoneCallbacks, shardCompactionCallb
 
 	vectorCache := cache.NewShardedFloat32LockCache(cfg.VectorForIDThunk, uc.VectorCacheMaxObjects,
 		cfg.Logger, normalizeOnRead, cache.DefaultDeletionInterval, cfg.AllocChecker)
+	vectorCache = NewDiskCacheFloat(vectorCache)
 
 	resetCtx, resetCtxCancel := context.WithCancel(context.Background())
 	shutdownCtx, shutdownCtxCancel := context.WithCancel(context.Background())
@@ -431,7 +432,7 @@ func (h *hnsw) findBestEntrypointForNode(ctx context.Context, currentMaxLevel, t
 		if h.compressed.Load() {
 			dist, err = distancer.DistanceToNode(entryPointID)
 		} else {
-			dist, err = h.distToNode(distancer, entryPointID, nodeVec)
+			dist, err = h.distToNode(distancer, entryPointID, nodeVec, 0)
 		}
 
 		var e storobj.ErrNotFound
@@ -445,7 +446,7 @@ func (h *hnsw) findBestEntrypointForNode(ctx context.Context, currentMaxLevel, t
 		}
 
 		eps.Insert(entryPointID, dist)
-		res, err := h.searchLayerByVectorWithDistancer(ctx, nodeVec, eps, 1, level, nil, distancer)
+		res, err := h.searchLayerByVectorWithDistancer(ctx, nodeVec, eps, 1, level, nil, distancer, 0)
 		if err != nil {
 			return 0,
 				errors.Wrapf(err, "update candidate: search layer at level %d", level)
@@ -474,9 +475,9 @@ func min(a, b int) int {
 	return b
 }
 
-func (h *hnsw) distBetweenNodes(a, b uint64) (float32, error) {
+func (h *hnsw) distBetweenNodes(a, b uint64, callerId int) (float32, error) {
 	if h.compressed.Load() {
-		dist, err := h.compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), a, b)
+		dist, err := h.compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), a, b, callerId)
 		if err != nil {
 			return 0, err
 		}
@@ -486,7 +487,7 @@ func (h *hnsw) distBetweenNodes(a, b uint64) (float32, error) {
 
 	// TODO: introduce single search/transaction context instead of spawning new
 	// ones
-	vecA, err := h.vectorForID(context.Background(), a)
+	vecA, err := h.vectorForID(context.Background(), a, callerId)
 	if err != nil {
 		var e storobj.ErrNotFound
 		if errors.As(err, &e) {
@@ -502,7 +503,7 @@ func (h *hnsw) distBetweenNodes(a, b uint64) (float32, error) {
 		return 0, fmt.Errorf("got a nil or zero-length vector at docID %d", a)
 	}
 
-	vecB, err := h.vectorForID(context.Background(), b)
+	vecB, err := h.vectorForID(context.Background(), b, callerId)
 	if err != nil {
 		var e storobj.ErrNotFound
 		if errors.As(err, &e) {
@@ -521,7 +522,7 @@ func (h *hnsw) distBetweenNodes(a, b uint64) (float32, error) {
 	return h.distancerProvider.SingleDist(vecA, vecB)
 }
 
-func (h *hnsw) distToNode(distancer compressionhelpers.CompressorDistancer, node uint64, vecB []float32) (float32, error) {
+func (h *hnsw) distToNode(distancer compressionhelpers.CompressorDistancer, node uint64, vecB []float32, callerId int) (float32, error) {
 	if h.compressed.Load() {
 		dist, err := distancer.DistanceToNode(node)
 		if err != nil {
@@ -533,7 +534,7 @@ func (h *hnsw) distToNode(distancer compressionhelpers.CompressorDistancer, node
 
 	// TODO: introduce single search/transaction context instead of spawning new
 	// ones
-	vecA, err := h.vectorForID(context.Background(), node)
+	vecA, err := h.vectorForID(context.Background(), node, callerId)
 	if err != nil {
 		var e storobj.ErrNotFound
 		if errors.As(err, &e) {

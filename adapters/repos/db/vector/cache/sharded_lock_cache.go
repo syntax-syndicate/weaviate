@@ -54,8 +54,8 @@ func NewShardedFloat32LockCache(vecForID common.VectorForID[float32], maxSize in
 	allocChecker memwatch.AllocChecker,
 ) Cache[float32] {
 	vc := &shardedLockCache[float32]{
-		vectorForID: func(ctx context.Context, id uint64) ([]float32, error) {
-			vec, err := vecForID(ctx, id)
+		vectorForID: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
+			vec, err := vecForID(ctx, id, callerId)
 			if err != nil {
 				return nil, err
 			}
@@ -128,7 +128,7 @@ func (s *shardedLockCache[T]) All() [][]T {
 	return s.cache
 }
 
-func (s *shardedLockCache[T]) Get(ctx context.Context, id uint64) ([]T, error) {
+func (s *shardedLockCache[T]) Get(ctx context.Context, id uint64, callerId int) ([]T, error) {
 	s.shardedLocks.RLock(id)
 	vec := s.cache[id]
 	s.shardedLocks.RUnlock(id)
@@ -137,7 +137,7 @@ func (s *shardedLockCache[T]) Get(ctx context.Context, id uint64) ([]T, error) {
 		return vec, nil
 	}
 
-	return s.handleCacheMiss(ctx, id)
+	return s.handleCacheMiss(ctx, id, callerId)
 }
 
 func (s *shardedLockCache[T]) Delete(ctx context.Context, id uint64) {
@@ -152,7 +152,7 @@ func (s *shardedLockCache[T]) Delete(ctx context.Context, id uint64) {
 	atomic.AddInt64(&s.count, -1)
 }
 
-func (s *shardedLockCache[T]) handleCacheMiss(ctx context.Context, id uint64) ([]T, error) {
+func (s *shardedLockCache[T]) handleCacheMiss(ctx context.Context, id uint64, callerId int) ([]T, error) {
 	if s.allocChecker != nil {
 		// we don't really know the exact size here, but we don't have to be
 		// accurate. If mem pressure is this high, we basically want to prevent any
@@ -173,7 +173,7 @@ func (s *shardedLockCache[T]) handleCacheMiss(ctx context.Context, id uint64) ([
 		}
 	}
 
-	vec, err := s.vectorForID(ctx, id)
+	vec, err := s.vectorForID(ctx, id, callerId)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func (s *shardedLockCache[T]) handleCacheMiss(ctx context.Context, id uint64) ([
 	return vec, nil
 }
 
-func (s *shardedLockCache[T]) MultiGet(ctx context.Context, ids []uint64) ([][]T, []error) {
+func (s *shardedLockCache[T]) MultiGet(ctx context.Context, ids []uint64, callerId int) ([][]T, []error) {
 	out := make([][]T, len(ids))
 	errs := make([]error, len(ids))
 
@@ -196,7 +196,7 @@ func (s *shardedLockCache[T]) MultiGet(ctx context.Context, ids []uint64) ([][]T
 		s.shardedLocks.RUnlock(id)
 
 		if vec == nil {
-			vecFromDisk, err := s.handleCacheMiss(ctx, id)
+			vecFromDisk, err := s.handleCacheMiss(ctx, id, callerId)
 			errs[i] = err
 			vec = vecFromDisk
 		}
@@ -220,11 +220,14 @@ func (s *shardedLockCache[T]) UnlockAll() {
 	s.shardedLocks.UnlockAll()
 }
 
-func (s *shardedLockCache[T]) Prefetch(id uint64) {
+func (s *shardedLockCache[T]) Prefetch(id uint64, callerId int) {
 	s.shardedLocks.RLock(id)
 	defer s.shardedLocks.RUnlock(id)
 
 	prefetchFunc(uintptr(unsafe.Pointer(&s.cache[id])))
+}
+
+func (s *shardedLockCache[T]) Connect(id, closestId uint64, vec []T) {
 }
 
 func (s *shardedLockCache[T]) Preload(id uint64, vec []T) {

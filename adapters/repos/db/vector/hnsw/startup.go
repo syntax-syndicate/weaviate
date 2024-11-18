@@ -183,7 +183,7 @@ func (h *hnsw) restoreFromDisk() error {
 		h.cache.Grow(uint64(len(h.nodes)))
 
 		if len(h.nodes) > 0 {
-			if vec, err := h.vectorForID(context.Background(), h.entryPointID); err == nil {
+			if vec, err := h.vectorForID(context.Background(), h.entryPointID, 0); err == nil {
 				h.dims = int32(len(vec))
 			}
 		}

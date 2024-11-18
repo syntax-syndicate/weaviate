@@ -42,7 +42,7 @@ func TestNilCheckOnPartiallyCleanedNode(t *testing.T) {
 			ID:                    "bug-2155",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewL2SquaredProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 		}, ent.UserConfig{
@@ -105,7 +105,7 @@ func TestQueryVectorDistancer(t *testing.T) {
 		ID:                    "bug-2155",
 		MakeCommitLoggerThunk: MakeNoopCommitLogger,
 		DistanceProvider:      distancer.NewL2SquaredProvider(),
-		VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+		VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 			return vectors[int(id)], nil
 		},
 	}, ent.UserConfig{
@@ -146,7 +146,7 @@ func TestAcornPercentage(t *testing.T) {
 			ID:                    "delete-test",
 			MakeCommitLoggerThunk: MakeNoopCommitLogger,
 			DistanceProvider:      distancer.NewCosineDistanceProvider(),
-			VectorForIDThunk: func(ctx context.Context, id uint64) ([]float32, error) {
+			VectorForIDThunk: func(ctx context.Context, id uint64, callerId int) ([]float32, error) {
 				return vectors[int(id)], nil
 			},
 			TempVectorForIDThunk: TempVectorForIDThunk(vectors),

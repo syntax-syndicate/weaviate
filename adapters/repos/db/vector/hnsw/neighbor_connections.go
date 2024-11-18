@@ -95,7 +95,7 @@ func (n *neighborFinderConnector) processNode(id uint64) (float32, error) {
 	var err error
 
 	if n.distancer == nil {
-		dist, err = n.graph.distToNode(n.distancer, id, n.nodeVec)
+		dist, err = n.graph.distToNode(n.distancer, id, n.nodeVec, 0)
 	} else {
 		dist, err = n.distancer.DistanceToNode(id)
 	}
@@ -248,13 +248,16 @@ func (n *neighborFinderConnector) doAtLevel(ctx context.Context, level int) erro
 		var err error
 
 		results, err = n.graph.searchLayerByVectorWithDistancer(ctx, n.nodeVec, eps, n.graph.efConstruction,
-			level, nil, n.distancer)
+			level, nil, n.distancer, 0)
 		if err != nil {
 			return errors.Wrapf(err, "search layer at level %d", level)
 		}
 
 		n.graph.insertMetrics.findAndConnectSearch(before)
 		before = time.Now()
+		if level == 0 {
+			n.graph.cache.Connect(n.node.id, results.Top().ID, n.nodeVec)
+		}
 	}
 
 	if err := n.graph.selectNeighborsHeuristic(results, maxConnections-total, n.denyList); err != nil {
@@ -339,7 +342,7 @@ func (n *neighborFinderConnector) connectNeighborAtLevel(neighborID uint64,
 	} else {
 		// we need to run the heuristic
 
-		dist, err := n.graph.distBetweenNodes(n.node.id, neighborID)
+		dist, err := n.graph.distBetweenNodes(n.node.id, neighborID, 0)
 		var e storobj.ErrNotFound
 		if err != nil && errors.As(err, &e) {
 			n.graph.handleDeletedNode(e.DocID, "connectNeighborAtLevel")
@@ -355,7 +358,7 @@ func (n *neighborFinderConnector) connectNeighborAtLevel(neighborID uint64,
 		candidates.Insert(n.node.id, dist)
 
 		for _, existingConnection := range currentConnections {
-			dist, err := n.graph.distBetweenNodes(existingConnection, neighborID)
+			dist, err := n.graph.distBetweenNodes(existingConnection, neighborID, 0)
 			var e storobj.ErrNotFound
 			if errors.As(err, &e) {
 				n.graph.handleDeletedNode(e.DocID, "connectNeighborAtLevel")
@@ -511,7 +514,7 @@ func (n *neighborFinderConnector) tryEpCandidate(candidate uint64) (bool, error)
 	var dist float32
 	var err error
 	if n.distancer == nil {
-		dist, err = n.graph.distToNode(n.distancer, candidate, n.nodeVec)
+		dist, err = n.graph.distToNode(n.distancer, candidate, n.nodeVec, 0)
 	} else {
 		dist, err = n.distancer.DistanceToNode(candidate)
 	}

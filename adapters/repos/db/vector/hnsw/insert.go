@@ -178,7 +178,7 @@ func (h *hnsw) addOne(ctx context.Context, vector []float32, node *vertex) error
 	var distancer compressionhelpers.CompressorDistancer
 	var returnFn compressionhelpers.ReturnDistancerFn
 	if h.compressed.Load() {
-		distancer, returnFn = h.compressor.NewDistancer(vector)
+		distancer, returnFn = h.compressor.NewDistancer(vector, 0)
 		defer returnFn()
 	}
 	entryPointID, err = h.findBestEntrypointForNode(ctx, currentMaximumLayer, targetLevel,
@@ -258,6 +258,7 @@ func (h *hnsw) insertInitialElement(node *vertex, nodeVec []float32) error {
 		h.compressor.Preload(node.id, nodeVec)
 	} else {
 		h.cache.Preload(node.id, nodeVec)
+		h.cache.Connect(node.id, 0, nodeVec)
 	}
 
 	// go h.insertHook(node.id, 0, node.connections)

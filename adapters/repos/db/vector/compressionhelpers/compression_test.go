@@ -31,7 +31,7 @@ func Test_NoRaceQuantizedVectorCompressor(t *testing.T) {
 		compressor, err := compressionhelpers.NewBQCompressor(distancer.NewCosineDistanceProvider(), 1e12, nil, testinghelpers.NewDummyStore(t), nil)
 		assert.Nil(t, err)
 		compressor.Preload(1, []float32{-0.5, 0.5})
-		vec, err := compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 2)
+		vec, err := compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 2, 0)
 		assert.Equal(t, float32(0), vec)
 		assert.NotNil(t, err)
 
@@ -39,7 +39,7 @@ func Test_NoRaceQuantizedVectorCompressor(t *testing.T) {
 		compressor.Preload(3, []float32{0.5, 0.5})
 		compressor.Delete(context.Background(), 1)
 
-		_, err = compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 2)
+		_, err = compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 2, 0)
 		assert.NotNil(t, err)
 	})
 
@@ -50,15 +50,15 @@ func Test_NoRaceQuantizedVectorCompressor(t *testing.T) {
 		compressor.Preload(2, []float32{0.25, 0.7})
 		compressor.Preload(3, []float32{0.5, 0.5})
 
-		d, err := compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 2)
+		d, err := compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 2, 0)
 		assert.Nil(t, err)
 		assert.Equal(t, float32(1), d)
 
-		d, err = compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 3)
+		d, err = compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 1, 3, 0)
 		assert.Nil(t, err)
 		assert.Equal(t, float32(1), d)
 
-		d, err = compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 2, 3)
+		d, err = compressor.DistanceBetweenCompressedVectorsFromIDs(context.Background(), 2, 3, 0)
 		assert.Nil(t, err)
 		assert.Equal(t, float32(0), d)
 	})
@@ -69,7 +69,7 @@ func Test_NoRaceQuantizedVectorCompressor(t *testing.T) {
 		compressor.Preload(1, []float32{-0.5, 0.5})
 		compressor.Preload(2, []float32{0.25, 0.7})
 		compressor.Preload(3, []float32{0.5, 0.5})
-		distancer, returnFn := compressor.NewDistancer([]float32{0.1, -0.2})
+		distancer, returnFn := compressor.NewDistancer([]float32{0.1, -0.2}, 0)
 		defer returnFn()
 
 		d, err := distancer.DistanceToNode(1)
@@ -95,7 +95,7 @@ func Test_NoRaceQuantizedVectorCompressor(t *testing.T) {
 		compressor.Preload(1, []float32{-0.5, 0.5})
 		compressor.Preload(2, []float32{0.25, 0.7})
 		compressor.Preload(3, []float32{0.5, 0.5})
-		distancer, err := compressor.NewDistancerFromID(1)
+		distancer, err := compressor.NewDistancerFromID(1, 0)
 
 		assert.Nil(t, err)
 
@@ -146,7 +146,7 @@ func Test_NoRaceQuantizedVectorCompressor(t *testing.T) {
 			memwatch.NewDummyMonitor(),
 		)
 		require.Nil(t, err)
-		d, _ := compressor.NewDistancer(storedVec)
+		d, _ := compressor.NewDistancer(storedVec, 0)
 		_, err = d.DistanceToFloat(mismatchedVec)
 		assert.EqualError(t, err, "2 vs 3: vector lengths don't match")
 	})

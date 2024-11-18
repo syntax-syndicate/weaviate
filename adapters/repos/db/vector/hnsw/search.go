@@ -191,7 +191,8 @@ func (h *hnsw) acornParams(allowList helpers.AllowList) (bool, int) {
 func (h *hnsw) searchLayerByVectorWithDistancer(ctx context.Context,
 	queryVector []float32,
 	entrypoints *priorityqueue.Queue[any], ef int, level int,
-	allowList helpers.AllowList, compressorDistancer compressionhelpers.CompressorDistancer) (*priorityqueue.Queue[any], error,
+	allowList helpers.AllowList, compressorDistancer compressionhelpers.CompressorDistancer,
+	callerId int) (*priorityqueue.Queue[any], error,
 ) {
 	h.pools.visitedListsLock.RLock()
 	visited := h.pools.visitedLists.Borrow()
@@ -206,7 +207,7 @@ func (h *hnsw) searchLayerByVectorWithDistancer(ctx context.Context,
 	if h.compressed.Load() {
 		if compressorDistancer == nil {
 			var returnFn compressionhelpers.ReturnDistancerFn
-			compressorDistancer, returnFn = h.compressor.NewDistancer(queryVector)
+			compressorDistancer, returnFn = h.compressor.NewDistancer(queryVector, callerId)
 			defer returnFn()
 		}
 	} else {
@@ -221,7 +222,7 @@ func (h *hnsw) searchLayerByVectorWithDistancer(ctx context.Context,
 	if h.compressed.Load() {
 		worstResultDistance, err = h.currentWorstResultDistanceToByte(results, compressorDistancer)
 	} else {
-		worstResultDistance, err = h.currentWorstResultDistanceToFloat(results, floatDistancer)
+		worstResultDistance, err = h.currentWorstResultDistanceToFloat(results, floatDistancer, callerId)
 	}
 	if err != nil {
 		return nil, errors.Wrapf(err, "calculate distance of current last result")
@@ -383,7 +384,7 @@ func (h *hnsw) searchLayerByVectorWithDistancer(ctx context.Context,
 			if h.compressed.Load() {
 				distance, err = compressorDistancer.DistanceToNode(neighborID)
 			} else {
-				distance, err = h.distanceToFloatNode(floatDistancer, neighborID)
+				distance, err = h.distanceToFloatNode(floatDistancer, neighborID, callerId)
 			}
 			if err != nil {
 				var e storobj.ErrNotFound
@@ -418,9 +419,9 @@ func (h *hnsw) searchLayerByVectorWithDistancer(ctx context.Context,
 				results.Insert(neighborID, distance)
 
 				if h.compressed.Load() {
-					h.compressor.Prefetch(candidates.Top().ID)
+					h.compressor.Prefetch(candidates.Top().ID, callerId)
 				} else {
-					h.cache.Prefetch(candidates.Top().ID)
+					h.cache.Prefetch(candidates.Top().ID, callerId)
 				}
 
 				// +1 because we have added one node size calculating the len
@@ -478,12 +479,12 @@ func (h *hnsw) insertViableEntrypointsAsCandidatesAndResults(
 }
 
 func (h *hnsw) currentWorstResultDistanceToFloat(results *priorityqueue.Queue[any],
-	distancer distancer.Distancer,
+	distancer distancer.Distancer, callerId int,
 ) (float32, error) {
 	if results.Len() > 0 {
 		id := results.Top().ID
 
-		d, err := h.distanceToFloatNode(distancer, id)
+		d, err := h.distanceToFloatNode(distancer, id, callerId)
 		if err != nil {
 			var e storobj.ErrNotFound
 			if errors.As(err, &e) {
@@ -536,7 +537,7 @@ func (h *hnsw) currentWorstResultDistanceToByte(results *priorityqueue.Queue[any
 func (h *hnsw) distanceFromBytesToFloatNode(concreteDistancer compressionhelpers.CompressorDistancer, nodeID uint64) (float32, error) {
 	slice := h.pools.tempVectors.Get(int(h.dims))
 	defer h.pools.tempVectors.Put(slice)
-	vec, err := h.TempVectorForIDThunk(context.Background(), nodeID, slice)
+	vec, err := h.TempVectorForIDThunk(context.Background(), nodeID, slice, 0)
 	if err != nil {
 		var e storobj.ErrNotFound
 		if errors.As(err, &e) {
@@ -550,8 +551,8 @@ func (h *hnsw) distanceFromBytesToFloatNode(concreteDistancer compressionhelpers
 	return concreteDistancer.DistanceToFloat(vec)
 }
 
-func (h *hnsw) distanceToFloatNode(distancer distancer.Distancer, nodeID uint64) (float32, error) {
-	candidateVec, err := h.vectorForID(context.Background(), nodeID)
+func (h *hnsw) distanceToFloatNode(distancer distancer.Distancer, nodeID uint64, callerId int) (float32, error) {
+	candidateVec, err := h.vectorForID(context.Background(), nodeID, callerId)
 	if err != nil {
 		return 0, err
 	}
@@ -673,6 +674,19 @@ func (s *fastIterator) Next() (uint64, bool) {
 	return index, index < size
 }
 
+func (h *hnsw) generateCallerId() int {
+	if dc, ok := h.cache.(*diskCache[float32]); ok {
+		return dc.GenerateCallerId()
+	}
+	return 0
+}
+
+func (h *hnsw) returnCallerId(id int) {
+	if dc, ok := h.cache.(*diskCache[float32]); ok {
+		dc.ReturnCallerId(id)
+	}
+}
+
 func (h *hnsw) knnSearchByVector(ctx context.Context, searchVec []float32, k int,
 	ef int, allowList helpers.AllowList,
 ) ([]uint64, []float32, error) {
@@ -695,13 +709,15 @@ func (h *hnsw) knnSearchByVector(ctx context.Context, searchVec []float32, k int
 	maxLayer := h.currentMaximumLayer
 	h.RUnlock()
 
+	callerId := h.generateCallerId()
 	var compressorDistancer compressionhelpers.CompressorDistancer
 	if h.compressed.Load() {
 		var returnFn compressionhelpers.ReturnDistancerFn
-		compressorDistancer, returnFn = h.compressor.NewDistancer(searchVec)
+		compressorDistancer, returnFn = h.compressor.NewDistancer(searchVec, callerId)
 		defer returnFn()
 	}
-	entryPointDistance, err := h.distToNode(compressorDistancer, entryPointID, searchVec)
+	defer h.returnCallerId(callerId)
+	entryPointDistance, err := h.distToNode(compressorDistancer, entryPointID, searchVec, callerId)
 	var e storobj.ErrNotFound
 	if err != nil && errors.As(err, &e) {
 		h.handleDeletedNode(e.DocID, "knnSearchByVector")
@@ -717,7 +733,7 @@ func (h *hnsw) knnSearchByVector(ctx context.Context, searchVec []float32, k int
 		eps := priorityqueue.NewMin[any](10)
 		eps.Insert(entryPointID, entryPointDistance)
 
-		res, err := h.searchLayerByVectorWithDistancer(ctx, searchVec, eps, 1, level, nil, compressorDistancer)
+		res, err := h.searchLayerByVectorWithDistancer(ctx, searchVec, eps, 1, level, nil, compressorDistancer, 0)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "knn search: search layer at level %d", level)
 		}
@@ -773,11 +789,11 @@ func (h *hnsw) knnSearchByVector(ctx context.Context, searchVec []float32, k int
 			i++
 		}
 		for _, entryPoint := range seeds {
-			entryPointDistance, _ := h.distToNode(compressorDistancer, entryPoint, searchVec)
+			entryPointDistance, _ := h.distToNode(compressorDistancer, entryPoint, searchVec, callerId)
 			eps.Insert(entryPoint, entryPointDistance)
 		}
 	}
-	res, err := h.searchLayerByVectorWithDistancer(ctx, searchVec, eps, ef, 0, allowList, compressorDistancer)
+	res, err := h.searchLayerByVectorWithDistancer(ctx, searchVec, eps, ef, 0, allowList, compressorDistancer, callerId)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "knn search: search layer at level %d", 0)
 	}
@@ -809,7 +825,7 @@ func (h *hnsw) knnSearchByVector(ctx context.Context, searchVec []float32, k int
 func (h *hnsw) QueryVectorDistancer(queryVector []float32) common.QueryVectorDistancer {
 	queryVector = h.normalizeVec(queryVector)
 	if h.compressed.Load() {
-		dist, returnFn := h.compressor.NewDistancer(queryVector)
+		dist, returnFn := h.compressor.NewDistancer(queryVector, 0)
 		f := func(nodeID uint64) (float32, error) {
 			if int(nodeID) > len(h.nodes) {
 				return -1, fmt.Errorf("node %v is larger than the cache size %v", nodeID, len(h.nodes))
@@ -825,7 +841,7 @@ func (h *hnsw) QueryVectorDistancer(queryVector []float32) common.QueryVectorDis
 			if int(nodeID) > len(h.nodes) {
 				return -1, fmt.Errorf("node %v is larger than the cache size %v", nodeID, len(h.nodes))
 			}
-			return h.distanceToFloatNode(distancer, nodeID)
+			return h.distanceToFloatNode(distancer, nodeID, 0)
 		}
 		return common.QueryVectorDistancer{DistanceFunc: f}
 	}
