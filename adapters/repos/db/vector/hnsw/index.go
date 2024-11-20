@@ -234,7 +234,7 @@ func New(cfg Config, uc ent.UserConfig, tombstoneCallbacks, shardCompactionCallb
 
 	vectorCache := cache.NewShardedFloat32LockCache(cfg.VectorForIDThunk, uc.VectorCacheMaxObjects,
 		cfg.Logger, normalizeOnRead, cache.DefaultDeletionInterval, cfg.AllocChecker)
-	vectorCache = NewDiskCacheFloat(vectorCache)
+	vectorCache = NewDiskCacheFloat(cfg.RootPath, vectorCache)
 
 	resetCtx, resetCtxCancel := context.WithCancel(context.Background())
 	shutdownCtx, shutdownCtxCancel := context.WithCancel(context.Background())

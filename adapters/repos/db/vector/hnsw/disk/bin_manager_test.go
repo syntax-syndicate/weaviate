@@ -15,14 +15,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/weaviate/weaviate/adapters/repos/db/vector/common"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/disk"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/hnsw/distancer"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/testinghelpers"
 )
 
 func TestBinManager(t *testing.T) {
+	tempDir := t.TempDir()
 	t.Run("add keeps track of vectors in bin", func(t *testing.T) {
-		bm := disk.NewFloatBinManager(100, distancer.NewL2SquaredProvider())
+		bm := disk.NewFloatBinManager(tempDir, 100, distancer.NewL2SquaredProvider(), common.NewDefaultShardedRWLocks())
 		assert.Nil(t, bm.Add(0, 0, make([]float32, 4)))
 		bin, err := bm.GetBinOfVector(0)
 		assert.Nil(t, err)
@@ -36,7 +38,7 @@ func TestBinManager(t *testing.T) {
 	})
 
 	t.Run("error when wrong closestId", func(t *testing.T) {
-		bm := disk.NewFloatBinManager(100, distancer.NewL2SquaredProvider())
+		bm := disk.NewFloatBinManager(tempDir, 100, distancer.NewL2SquaredProvider(), common.NewDefaultShardedRWLocks())
 		assert.Nil(t, bm.Add(0, 0, make([]float32, 4)))
 		bin, err := bm.GetBinOfVector(0)
 		assert.Nil(t, err)
@@ -47,7 +49,7 @@ func TestBinManager(t *testing.T) {
 
 	t.Run("split when max is reached", func(t *testing.T) {
 		vecs, _ := testinghelpers.RandomVecs(11, 0, 4)
-		bm := disk.NewFloatBinManager(10, distancer.NewL2SquaredProvider())
+		bm := disk.NewFloatBinManager(tempDir, 10, distancer.NewL2SquaredProvider(), common.NewDefaultShardedRWLocks())
 		for i := uint64(0); i < 11; i++ {
 			assert.Nil(t, bm.Add(0, i, vecs[i]))
 		}

@@ -24,6 +24,7 @@ type Cache[T any] interface {
 	Len() int32
 	CountVectors() int64
 	Delete(ctx context.Context, id uint64)
+	DeleteNoLock(ctx context.Context, id uint64)
 	Preload(id uint64, vec []T)
 	PreloadNoLock(id uint64, vec []T)
 	Connect(id, closestId uint64, vec []T)

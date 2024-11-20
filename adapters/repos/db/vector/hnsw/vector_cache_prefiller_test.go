@@ -96,6 +96,10 @@ func (f *fakeCache) Delete(ctx context.Context, id uint64) {
 	panic("not implemented")
 }
 
+func (f *fakeCache) DeleteNoLock(ctx context.Context, id uint64) {
+	panic("not implemented")
+}
+
 func (f *fakeCache) Preload(id uint64, vec []float32) {
 	panic("not implemented")
 }

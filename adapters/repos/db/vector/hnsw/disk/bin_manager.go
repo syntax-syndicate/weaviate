@@ -31,28 +31,28 @@ type BinManager[T float32 | byte | uint64] struct {
 	shardedLocks *common.ShardedRWLocks
 }
 
-func NewFloatBinManager(binMaxSize int, distancer compressionhelpers.GenericDistancer[float32], shardedLocks *common.ShardedRWLocks) *BinManager[float32] {
+func NewFloatBinManager(binPath string, binMaxSize int, distancer compressionhelpers.GenericDistancer[float32], shardedLocks *common.ShardedRWLocks) *BinManager[float32] {
 	return &BinManager[float32]{
 		binMaxSize:   binMaxSize,
-		binPersister: newFloatBinPersister(),
+		binPersister: newFloatBinPersister(binPath, 1536),
 		distancer:    distancer,
 		shardedLocks: shardedLocks,
 	}
 }
 
-func NewByteBinManager(binMaxSize int, distancer compressionhelpers.GenericDistancer[byte], shardedLocks *common.ShardedRWLocks) *BinManager[byte] {
+func NewByteBinManager(binPath string, binMaxSize int, distancer compressionhelpers.GenericDistancer[byte], shardedLocks *common.ShardedRWLocks) *BinManager[byte] {
 	return &BinManager[byte]{
 		binMaxSize:   binMaxSize,
-		binPersister: newByteBinPersister(),
+		binPersister: newByteBinPersister(binPath, 1536),
 		distancer:    distancer,
 		shardedLocks: shardedLocks,
 	}
 }
 
-func NewUintBinManager(binMaxSize int, distancer compressionhelpers.GenericDistancer[uint64], shardedLocks *common.ShardedRWLocks) *BinManager[uint64] {
+func NewUintBinManager(binPath string, binMaxSize int, distancer compressionhelpers.GenericDistancer[uint64], shardedLocks *common.ShardedRWLocks) *BinManager[uint64] {
 	return &BinManager[uint64]{
 		binMaxSize:   binMaxSize,
-		binPersister: newUintBinPersister(),
+		binPersister: newUintBinPersister(binPath, 1536),
 		distancer:    distancer,
 		shardedLocks: shardedLocks,
 	}
@@ -60,7 +60,10 @@ func NewUintBinManager(binMaxSize int, distancer compressionhelpers.GenericDista
 
 func (bm *BinManager[T]) GetBinSize(binId int) int {
 	return len(bm.vecs[binId])
-	//return len(bm.binPersister.getBin(binId))
+}
+
+func (bm *BinManager[T]) GetVecIdsInBin(binId int) []uint64 {
+	return bm.vecs[binId]
 }
 
 func (bm *BinManager[T]) Add(closestId, vecId uint64, vector []T) error {
@@ -88,9 +91,9 @@ func (bm *BinManager[T]) Add(closestId, vecId uint64, vector []T) error {
 		bm.bins[vecId] = binId
 		bin1, bin2, err := bm.splitBin(bin)
 		if err != nil {
-			return nil
+			return err
 		}
-		bm.binPersister.updateBin(binId, bin1)
+		bm.binPersister.addBin(binId, bin1)
 		bm.maxBin++
 		bm.binPersister.addBin(bm.maxBin, bin2)
 		bm.vecs[binId] = Keys(bin1)
@@ -124,8 +127,8 @@ func (bm *BinManager[T]) GetBinOfVector(vecId uint64) (int, error) {
 	return -1, fmt.Errorf("unknown id: %d, while trying to get the bin of a vector", vecId)
 }
 
-func (bm *BinManager[T]) GetBin(binId int) map[uint64][]T {
-	return bm.binPersister.getBin(binId)
+func (bm *BinManager[T]) GetRawBin(binId int) []byte {
+	return bm.binPersister.getRawBin(binId)
 }
 
 func (bm *BinManager[T]) splitBin(vectors map[uint64][]T) (map[uint64][]T, map[uint64][]T, error) {

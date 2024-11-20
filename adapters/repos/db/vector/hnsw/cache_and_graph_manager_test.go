@@ -14,7 +14,6 @@ package hnsw_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -28,20 +27,12 @@ import (
 	ent "github.com/weaviate/weaviate/entities/vectorindex/hnsw"
 )
 
-const rootPath = "doesnt-matter-as-committlogger-is-mocked-out"
-
 func TestIndexOnDisk(t *testing.T) {
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}(rootPath)
-	efConstruction := 64
+	efConstruction := 16
 	ef := 32
-	maxNeighbors := 32
-	dimensions := 128
-	vectors_size := 10_000
+	maxNeighbors := 8
+	dimensions := 1536
+	vectors_size := 1000
 	queries_size := 10
 	switch_at := vectors_size
 	before := time.Now()
@@ -56,7 +47,7 @@ func TestIndexOnDisk(t *testing.T) {
 	uc.VectorCacheMaxObjects = 10e12
 
 	index, _ := hnsw.New(hnsw.Config{
-		RootPath:              rootPath,
+		RootPath:              t.TempDir(),
 		ID:                    "recallbenchmark",
 		MakeCommitLoggerThunk: hnsw.MakeNoopCommitLogger,
 		DistanceProvider:      distancer,

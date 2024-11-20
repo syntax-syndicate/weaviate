@@ -12,27 +12,39 @@
 package disk
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
+	"path/filepath"
 )
 
 type binPersister[T float32 | byte | uint64] struct {
+	dims int
+	path string
 }
 
-func newFloatBinPersister() *binPersister[float32] {
-	return &binPersister[float32]{}
+func newFloatBinPersister(path string, dims int) *binPersister[float32] {
+	return &binPersister[float32]{
+		dims: dims,
+		path: path,
+	}
 }
 
-func newByteBinPersister() *binPersister[byte] {
-	return &binPersister[byte]{}
+func newByteBinPersister(path string, dims int) *binPersister[byte] {
+	return &binPersister[byte]{
+		dims: dims,
+		path: path,
+	}
 }
 
-func newUintBinPersister() *binPersister[uint64] {
-	return &binPersister[uint64]{}
+func newUintBinPersister(path string, dims int) *binPersister[uint64] {
+	return &binPersister[uint64]{
+		dims: dims,
+		path: path,
+	}
 }
 
 func (bp *binPersister[T]) addVectorToBin(binId int, id uint64, vector []T) {
@@ -42,14 +54,27 @@ func (bp *binPersister[T]) addVectorToBin(binId int, id uint64, vector []T) {
 		log.Fatal("Couldn't open file: ", name, " with error: ", err)
 	}
 	defer f.Close()
-	err = binary.Write(f, binary.LittleEndian, id)
-	if err != nil {
-		log.Fatal("Write failed")
+	buff := make([]byte, bp.dims*4+8)
+	binary.LittleEndian.PutUint64(buff, id)
+	for i := 0; i < len(vector); i++ {
+		binary.LittleEndian.PutUint32(buff[8+i*4:], math.Float32bits(float32(vector[i])))
 	}
-	err = binary.Write(f, binary.LittleEndian, vector)
+	f.Write(buff)
+}
+
+func (bp *binPersister[T]) getRawBin(binId int) []byte {
+	f, err := os.OpenFile(bp.nameForBin(binId), os.O_RDONLY, 0644)
 	if err != nil {
-		log.Fatal("Write failed")
+		log.Fatal("Couldn't open file")
 	}
+	defer f.Close()
+	buff := make([]byte, 100*(4*bp.dims+8))
+	n, err := f.Read(buff)
+	if err != io.EOF && err != nil {
+		log.Fatal(err)
+		return nil
+	}
+	return buff[:n]
 }
 
 func (bp *binPersister[T]) getBin(binId int) map[uint64][]T {
@@ -58,30 +83,25 @@ func (bp *binPersister[T]) getBin(binId int) map[uint64][]T {
 		log.Fatal("Couldn't open file")
 	}
 	defer f.Close()
-	buf := make([]byte, 100*4*1536)
+	buff := make([]byte, 100*(4*bp.dims+8))
 	result := make(map[uint64][]T)
-	reader := bytes.NewReader(buf)
 	var n int = 1
 	for err == nil && n > 0 {
-		n, err = f.Read(buf)
-		var keyBuf uint64
-		valBuf := make([]T, 1536)
-		for i := 0; i < n/100/4/1536; i++ {
-			binary.Read(reader, binary.LittleEndian, &keyBuf)
-			binary.Read(reader, binary.LittleEndian, &valBuf)
-			result[keyBuf] = valBuf
+		n, err = f.Read(buff)
+		for i := 0; i < n/(4*bp.dims+8); i++ {
+			valBuf := make([]T, bp.dims)
+			key := binary.LittleEndian.Uint64(buff[i*(bp.dims*4+8):])
+			for j := 0; j < bp.dims; j++ {
+				valBuf[j] = T(math.Float32frombits(binary.LittleEndian.Uint32(buff[i*(bp.dims*4+8)+8+j*4:])))
+			}
+			result[key] = valBuf
 		}
-		buf = buf[n:]
 	}
 	if err != io.EOF && err != nil {
 		log.Fatal(err)
 		return nil
 	}
 	return result
-}
-
-func (bp *binPersister[T]) updateBin(binId int, vectors map[uint64][]T) {
-	bp.addBin(binId, vectors)
 }
 
 func (bp *binPersister[T]) addBin(binId int, vectors map[uint64][]T) {
@@ -91,18 +111,20 @@ func (bp *binPersister[T]) addBin(binId int, vectors map[uint64][]T) {
 		log.Fatal("Couldn't open file: ", name, " with error: ", err)
 	}
 	defer f.Close()
+	buff := make([]byte, len(vectors)*(bp.dims*4+8))
 	for key, val := range vectors {
-		err = binary.Write(f, binary.LittleEndian, key)
-		if err != nil {
-			log.Fatal("Write failed")
+		binary.LittleEndian.PutUint64(buff, key)
+		for i := 0; i < len(val); i++ {
+			binary.LittleEndian.PutUint32(buff[8+i*4:], math.Float32bits(float32(val[i])))
 		}
-		err = binary.Write(f, binary.LittleEndian, val)
-		if err != nil {
-			log.Fatal("Write failed")
-		}
+	}
+	n, err := f.Write(buff)
+	for err != nil && n > 0 {
+		buff = buff[n:]
+		n, err = f.Write(buff)
 	}
 }
 
 func (bp *binPersister[T]) nameForBin(binId int) string {
-	return fmt.Sprint(binId, ".bin")
+	return filepath.Join(bp.path, fmt.Sprint(binId, ".bin"))
 }

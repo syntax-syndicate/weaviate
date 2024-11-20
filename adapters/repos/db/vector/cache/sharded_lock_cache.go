@@ -152,6 +152,15 @@ func (s *shardedLockCache[T]) Delete(ctx context.Context, id uint64) {
 	atomic.AddInt64(&s.count, -1)
 }
 
+func (s *shardedLockCache[T]) DeleteNoLock(ctx context.Context, id uint64) {
+	if int(id) >= len(s.cache) || s.cache[id] == nil {
+		return
+	}
+
+	s.cache[id] = nil
+	atomic.AddInt64(&s.count, -1)
+}
+
 func (s *shardedLockCache[T]) handleCacheMiss(ctx context.Context, id uint64, callerId int) ([]T, error) {
 	if s.allocChecker != nil {
 		// we don't really know the exact size here, but we don't have to be

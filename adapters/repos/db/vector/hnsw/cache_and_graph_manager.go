@@ -14,8 +14,8 @@ package hnsw
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
-	"os"
 	"sync"
 
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/cache"
@@ -27,7 +27,7 @@ import (
 type memoryManager[T float32 | byte | uint64] struct {
 	idsInUse   []bool
 	binUsed    []int
-	binsUsedBy []map[int]interface{}
+	binsUsedBy []map[int]bool
 }
 
 type diskCache[T float32 | byte | uint64] struct {
@@ -36,6 +36,7 @@ type diskCache[T float32 | byte | uint64] struct {
 	memoryManager *memoryManager[T]
 	binManager    *disk.BinManager[T]
 	shardedLocks  *common.ShardedRWLocks
+	raw           [][]byte
 }
 
 func (dc *diskCache[T]) GenerateCallerId() int {
@@ -52,26 +53,24 @@ func (dc *diskCache[T]) GenerateCallerId() int {
 
 func (dc *diskCache[T]) ReturnCallerId(id int) {
 	dc.Lock()
-	total := 0
 	dc.memoryManager.idsInUse[id] = false
 	for i := range dc.memoryManager.binsUsedBy[id] {
-		size := dc.binManager.GetBinSize(i)
-		total += size
 		dc.memoryManager.binUsed[i]--
 		if dc.memoryManager.binUsed[i] == 0 {
+			fmt.Println("dropping ", i)
 			dc.dropBin(i)
 		}
 	}
-	dc.memoryManager.binsUsedBy[id] = make(map[int]interface{})
+	dc.memoryManager.binsUsedBy[id] = make(map[int]bool)
 	dc.Unlock()
 }
 
-func NewDiskCacheFloat(cache cache.Cache[float32]) cache.Cache[float32] {
+func NewDiskCacheFloat(path string, cache cache.Cache[float32]) cache.Cache[float32] {
 	chunksLoaded := make([]bool, 100_000)
 	chunksLoaded[0] = true
-	binsUsedBy := make([]map[int]interface{}, 20)
+	binsUsedBy := make([]map[int]bool, 20)
 	for i := range binsUsedBy {
-		binsUsedBy[i] = make(map[int]interface{})
+		binsUsedBy[i] = make(map[int]bool)
 	}
 
 	shardedLocks := common.NewDefaultShardedRWLocks()
@@ -83,7 +82,8 @@ func NewDiskCacheFloat(cache cache.Cache[float32]) cache.Cache[float32] {
 			binsUsedBy: binsUsedBy,
 		},
 		shardedLocks: shardedLocks,
-		binManager:   disk.NewFloatBinManager(100, distancer.NewCosineDistanceProvider(), shardedLocks),
+		binManager:   disk.NewFloatBinManager(path, 100, distancer.NewCosineDistanceProvider(), shardedLocks),
+		raw:          make([][]byte, 100_000),
 	}
 }
 
@@ -106,7 +106,14 @@ func NewDiskCacheUint64(cache cache.Cache[uint64]) cache.Cache[uint64] {
 func (dc *diskCache[T]) Get(ctx context.Context, id uint64, callerId int) ([]T, error) {
 	binId, _ := dc.binManager.GetBinOfVector(id)
 	dc.shardedLocks.RLock(uint64(binId))
-	dc.shardedLocks.RUnlock(uint64(binId))
+	if binId > -1 && binId < len(dc.raw) && dc.raw[binId] != nil {
+		valBuf := make([]T, 1536)
+		binary.LittleEndian.Uint64(dc.raw[binId])
+		for j := 0; j < 1536; j++ {
+			valBuf[j] = T(math.Float32frombits(binary.LittleEndian.Uint32(dc.raw[binId][8+j*4:])))
+		}
+	}
+	defer dc.shardedLocks.RUnlock(uint64(binId))
 	return dc.cache.Get(ctx, id, callerId)
 }
 
@@ -124,6 +131,10 @@ func (dc *diskCache[T]) CountVectors() int64 {
 
 func (dc *diskCache[T]) Delete(ctx context.Context, id uint64) {
 	dc.cache.Delete(ctx, id)
+}
+
+func (dc *diskCache[T]) DeleteNoLock(ctx context.Context, id uint64) {
+	dc.cache.DeleteNoLock(ctx, id)
 }
 
 func (dc *diskCache[T]) Connect(id, closestId uint64, vec []T) {
@@ -150,17 +161,18 @@ func (dc *diskCache[T]) Prefetch(id uint64, callerId int) {
 		return
 	}
 	binsUsed := dc.memoryManager.binsUsedBy[callerId]
+	dc.memoryManager.binUsed[binId]++
 	_, ok := binsUsed[binId]
+	dc.memoryManager.binsUsedBy[callerId][binId] = true
+	usedBefore := dc.memoryManager.binUsed[binId] > 1
+	dc.Unlock()
 	if !ok {
-		binsUsed[binId] = true
-		dc.memoryManager.binUsed[binId]++
-		usedBefore := dc.memoryManager.binUsed[binId] > 1
-		dc.Unlock()
 		if !usedBefore {
-			dc.loadBin(binId)
+			dc.shardedLocks.Lock(uint64(binId))
+			go func() {
+				dc.loadBin(binId)
+			}()
 		}
-	} else {
-		dc.Unlock()
 	}
 	dc.cache.Prefetch(id, callerId)
 }
@@ -194,36 +206,14 @@ func (dc *diskCache[T]) UnlockAll() {
 }
 
 func (dc *diskCache[T]) loadBin(id int) {
-	dc.shardedLocks.Lock(uint64(id))
+	dc.raw[id] = dc.binManager.GetRawBin(id)
 	defer dc.shardedLocks.Unlock(uint64(id))
-	vecs := make([][]float32, 100)
-	conns := make([][]uint32, 100)
-	fi, err := os.Open("output.txt")
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if err := fi.Close(); err != nil {
-			panic(err)
-		}
-	}()
-	buf := make([]byte, (1532+16)*4)
-	_, err = fi.Read(buf)
-	if err != nil {
-		panic(err)
-	}
-	for i := 0; i < 100; i++ {
-		vecs[i] = make([]float32, 1532)
-		conns[i] = make([]uint32, 16)
-		for j := 0; j < 1532; j++ {
-			bits := binary.LittleEndian.Uint32(buf)
-			vecs[i][j] = math.Float32frombits(bits)
-		}
-		for j := 0; j < 16; j++ {
-			conns[i][j] = binary.LittleEndian.Uint32(buf)
-		}
-	}
 }
 
 func (dc *diskCache[T]) dropBin(id int) {
+	dc.shardedLocks.Lock(uint64(id))
+	defer dc.shardedLocks.Unlock(uint64(id))
+	for _, i := range dc.binManager.GetVecIdsInBin(id) {
+		dc.cache.DeleteNoLock(context.Background(), i)
+	}
 }
