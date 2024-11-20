@@ -6,9 +6,10 @@ from _pytest.fixtures import SubRequest
 from .conftest import _sanitize_role_name
 
 
+@pytest.mark.rbac
 def test_obj_insert(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         name = _sanitize_role_name(request.node.name)
         client.collections.delete(name)
@@ -16,7 +17,7 @@ def test_obj_insert(request: SubRequest):
         col = client.collections.create(name=name)
 
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name,
@@ -38,7 +39,7 @@ def test_obj_insert(request: SubRequest):
 
         # no metadata read
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -58,7 +59,7 @@ def test_obj_insert(request: SubRequest):
 
         # no data create
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -77,9 +78,10 @@ def test_obj_insert(request: SubRequest):
             client.roles.delete(both_write.name)
 
 
+@pytest.mark.rbac
 def test_obj_replace(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         name = _sanitize_role_name(request.node.name)
         client.collections.delete(name)
@@ -89,7 +91,7 @@ def test_obj_replace(request: SubRequest):
         uuid_to_replace = col.data.insert({})
 
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name,
@@ -111,7 +113,7 @@ def test_obj_replace(request: SubRequest):
 
         # no metadata read
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -131,7 +133,7 @@ def test_obj_replace(request: SubRequest):
 
         # no data create
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -150,9 +152,10 @@ def test_obj_replace(request: SubRequest):
             client.roles.delete(both_write.name)
 
 
+@pytest.mark.rbac
 def test_obj_update(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         name = _sanitize_role_name(request.node.name)
         client.collections.delete(name)
@@ -162,7 +165,7 @@ def test_obj_update(request: SubRequest):
         uuid_to_replace = col.data.insert({})
 
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name,
@@ -184,7 +187,7 @@ def test_obj_update(request: SubRequest):
 
         # no metadata read
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -204,7 +207,7 @@ def test_obj_update(request: SubRequest):
 
         # no data update
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -223,9 +226,10 @@ def test_obj_update(request: SubRequest):
             client.roles.delete(both_write.name)
 
 
+@pytest.mark.rbac
 def test_obj_delete(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         name = _sanitize_role_name(request.node.name)
         client.collections.delete(name)
@@ -233,7 +237,7 @@ def test_obj_delete(request: SubRequest):
         col = client.collections.create(name=name)
 
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             uuid_to_delete = col.data.insert({})
 
@@ -258,7 +262,7 @@ def test_obj_delete(request: SubRequest):
 
         # no metadata read
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             uuid_to_delete = col.data.insert({})
 
@@ -283,7 +287,7 @@ def test_obj_delete(request: SubRequest):
 
         # no data delete
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,
@@ -302,9 +306,10 @@ def test_obj_delete(request: SubRequest):
             client.roles.delete(both_write.name)
 
 
+@pytest.mark.rbac
 def test_obj_exists(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         name = _sanitize_role_name(request.node.name)
         client.collections.delete(name)
@@ -314,7 +319,7 @@ def test_obj_exists(request: SubRequest):
         uuid_to_check = col.data.insert({})
 
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name,
@@ -335,7 +340,7 @@ def test_obj_exists(request: SubRequest):
 
         # no metadata read
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name,
@@ -356,7 +361,7 @@ def test_obj_exists(request: SubRequest):
 
         # no data read
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=name,

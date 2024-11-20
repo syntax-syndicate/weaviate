@@ -10,9 +10,10 @@ from _pytest.fixtures import SubRequest
 from .conftest import _sanitize_role_name
 
 
+@pytest.mark.rbac
 def test_rbac_search(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         name_collection1 = _sanitize_role_name(request.node.name) + "col1"
         name_collection2 = _sanitize_role_name(request.node.name) + "col2"
@@ -28,7 +29,7 @@ def test_rbac_search(request: SubRequest):
 
         # with correct rights
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name_role,
@@ -51,7 +52,7 @@ def test_rbac_search(request: SubRequest):
 
         # with unrelated rights
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name_role,
@@ -70,7 +71,7 @@ def test_rbac_search(request: SubRequest):
 
         # rights for wrong collection
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name_role,
@@ -92,7 +93,7 @@ def test_rbac_search(request: SubRequest):
 
         # only metadata rights
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name_role,
@@ -115,7 +116,7 @@ def test_rbac_search(request: SubRequest):
 
         # only data rights
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=name_role,

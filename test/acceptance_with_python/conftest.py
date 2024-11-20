@@ -2,6 +2,12 @@ from typing import Any, Optional, List, Generator, Protocol, Type, Dict, Tuple, 
 
 import pytest
 from _pytest.fixtures import SubRequest
+from _pytest.config import Config
+from _pytest.main import Session
+import time
+import os
+import subprocess
+from .cluster_config import WeaviateClusterConfig, ClusterType, InstanceType
 
 import weaviate
 from weaviate.collections import Collection
@@ -21,6 +27,95 @@ from weaviate.config import AdditionalConfig
 
 from weaviate.collections.classes.config_named_vectors import _NamedVectorConfigCreate
 import weaviate.classes as wvc
+
+
+# add option to pytest to specify cluster type
+def pytest_addoption(parser):
+    parser.addoption(
+        "--cluster-type",
+        action="store",
+        default="single",
+        help="cluster type: single or three",
+        choices=["single", "three"],
+    )
+    parser.addoption(
+        "--instance-type",
+        action="store",
+        default="regular",
+        help="instance type: regular or rbac",
+        choices=["regular", "rbac"],
+    )
+
+
+# Session-level fixture for cluster configuration
+@pytest.fixture(scope="session")
+def instance_type(request) -> InstanceType:
+    return InstanceType(request.config.getoption("--instance-type"))
+
+
+@pytest.fixture(scope="session")
+def cluster_type(request) -> ClusterType:
+    return ClusterType(request.config.getoption("--cluster-type"))
+
+
+def wait_for_ready(port: int, max_retries: int = 30):
+    import requests
+    from requests.exceptions import RequestException
+
+    for _ in range(max_retries):
+        try:
+            response = requests.get(f"http://localhost:{port}/v1/.well-known/ready")
+            if response.status_code == 200:
+                return
+        except RequestException:
+            pass
+        time.sleep(1)
+    raise TimeoutError(f"Node on port {port} did not become ready")
+
+
+# Session-level fixture for Weaviate cluster, autouse=True to start cluster before tests
+@pytest.fixture(scope="session", autouse=True)
+def weaviate_cluster(cluster_type, instance_type) -> Generator[WeaviateClusterConfig, None, None]:
+    compose_file = None
+
+    # TOREMOVE: This makes the parallel tests useless as each worker needs to wait , we will have to create the cluster
+    # in a previous step (either using python or bash)
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+
+    if worker_id == "gw0":
+        config = WeaviateClusterConfig(cluster_type, instance_type)
+        compose_file = config.write_compose_file()
+
+        # Start cluster
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "-f", compose_file, "up", "-d"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            print(f"Docker compose failed with error:\n{e.stderr}")
+            raise
+
+        # Wait for all nodes
+        for node in config.nodes:
+            wait_for_ready(node.http_port)
+
+        yield config
+
+        # Cleanup
+        # subprocess.run(["docker", "compose", "-f", compose_file, "down"], check=True)
+        # os.unlink(compose_file)
+    else:
+        # Other workers should wait for the primary worker to set up the cluster
+        time.sleep(5)  # Give primary worker time to start cluster
+        yield WeaviateClusterConfig(cluster_type, instance_type)
+
+    if compose_file:
+        print(
+            f"\nTests run finished! To cleanup manually run:\ndocker compose -f {compose_file} down"
+        )
 
 
 class CollectionFactory(Protocol):

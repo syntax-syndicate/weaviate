@@ -6,9 +6,10 @@ from _pytest.fixtures import SubRequest
 from .conftest import _sanitize_role_name, generate_missing_lists
 
 
+@pytest.mark.rbac
 def test_rbac_refs(request: SubRequest):
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         col_name = _sanitize_role_name(request.node.name)
         client.collections.delete([col_name + "target", col_name + "source"])
@@ -30,7 +31,7 @@ def test_rbac_refs(request: SubRequest):
             RBAC.permissions.collections.objects.update(collection=source.name),
         ]
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             both_write = client.roles.create(
                 name=role_name,
@@ -64,7 +65,7 @@ def test_rbac_refs(request: SubRequest):
 
         for permissions in generate_missing_lists(needed_permissions):
             with weaviate.connect_to_local(
-                port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+                port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
             ) as client_no_rights:
                 role = client.roles.create(
                     name=role_name,
@@ -106,11 +107,12 @@ def test_rbac_refs(request: SubRequest):
         client.collections.delete([target.name, source.name])
 
 
+@pytest.mark.rbac
 def test_batch_delete_with_filter(request: SubRequest) -> None:
     col_name = _sanitize_role_name(request.node.name)
 
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         client.collections.delete([col_name + "target", col_name + "source"])
         # create two collections with some objects to test refs
@@ -129,7 +131,7 @@ def test_batch_delete_with_filter(request: SubRequest) -> None:
 
         # read+delete for both
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             uuid_source = source.data.insert(properties={}, references={"ref": uuid_target1})
 
@@ -175,7 +177,7 @@ def test_batch_delete_with_filter(request: SubRequest) -> None:
         # read+delete for just one
         for col in [source.name, target.name]:
             with weaviate.connect_to_local(
-                port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+                port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
             ) as client_no_rights:
                 uuid_source = source.data.insert(properties={}, references={"ref": uuid_target1})
 
@@ -225,11 +227,12 @@ def test_batch_delete_with_filter(request: SubRequest) -> None:
         client.collections.delete([target.name, source.name])
 
 
+@pytest.mark.rbac
 def test_search_with_filter_and_return(request: SubRequest) -> None:
     col_name = _sanitize_role_name(request.node.name)
 
     with weaviate.connect_to_local(
-        port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("admin-key")
+        port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("admin-key")
     ) as client:
         client.collections.delete([col_name + "target", col_name + "source"])
         # create two collections with some objects to test refs
@@ -249,7 +252,7 @@ def test_search_with_filter_and_return(request: SubRequest) -> None:
 
         # read for both
         with weaviate.connect_to_local(
-            port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+            port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
         ) as client_no_rights:
             client.roles.create(
                 name=role_name,
@@ -293,7 +296,7 @@ def test_search_with_filter_and_return(request: SubRequest) -> None:
         # read for just one
         for col in [source.name, target.name]:
             with weaviate.connect_to_local(
-                port=8081, grpc_port=50052, auth_credentials=wvc.init.Auth.api_key("custom-key")
+                port=8080, grpc_port=50051, auth_credentials=wvc.init.Auth.api_key("custom-key")
             ) as client_no_rights:
                 client.roles.create(
                     name=role_name,
