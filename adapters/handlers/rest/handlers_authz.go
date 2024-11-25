@@ -293,6 +293,9 @@ func (h *authZHandlers) assignRole(params authz.AssignRoleParams, principal *mod
 	if err := h.authorizer.Authorize(principal, authorization.UPDATE, authorization.Roles(params.Body.Roles...)...); err != nil {
 		return authz.NewAssignRoleForbidden().WithPayload(errPayloadFromSingleErr(err))
 	}
+	if err := h.authorizer.Authorize(principal, authorization.READ, authorization.Roles(params.Body.Roles...)...); err != nil {
+		return authz.NewAssignRoleForbidden().WithPayload(errPayloadFromSingleErr(err))
+	}
 
 	existedRoles, err := h.controller.GetRoles(params.Body.Roles...)
 	if err != nil {
@@ -323,6 +326,10 @@ func (h *authZHandlers) assignRole(params authz.AssignRoleParams, principal *mod
 func (h *authZHandlers) getRolesForUser(params authz.GetRolesForUserParams, principal *models.Principal) middleware.Responder {
 	if params.ID == "" {
 		return authz.NewGetRolesForUserBadRequest().WithPayload(errPayloadFromSingleErr(fmt.Errorf("role name is required")))
+	}
+
+	if err := h.authorizer.Authorize(principal, authorization.READ, authorization.Roles(params.ID)...); err != nil {
+		return authz.NewGetRolesForUserForbidden().WithPayload(errPayloadFromSingleErr(err))
 	}
 
 	existedRoles, err := h.controller.GetRolesForUser(params.ID)
