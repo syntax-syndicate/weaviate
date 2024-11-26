@@ -91,7 +91,7 @@ func (s *Shard) DeleteObject(ctx context.Context, id strfmt.UUID, deletionTime t
 		}
 	}
 
-	if err = s.mayDeleteObjectHashTree(idBytes, updateTime); err != nil {
+	if err = s.mayDeleteObjectHashTree(idBytes, updateTime, deletionTime); err != nil {
 		return fmt.Errorf("object deletion in hashtree: %w", err)
 	}
 
@@ -167,7 +167,7 @@ func (s *Shard) deleteOne(ctx context.Context, bucket *lsmkv.Bucket, obj, idByte
 		}
 	}
 
-	if err = s.mayDeleteObjectHashTree(idBytes, currentUpdateTime); err != nil {
+	if err = s.mayDeleteObjectHashTree(idBytes, currentUpdateTime, deletionTime); err != nil {
 		return fmt.Errorf("store object deletion in hashtree: %w", err)
 	}
 
@@ -211,7 +211,7 @@ func (s *Shard) cleanupInvertedIndexOnDelete(previous []byte, docID uint64) erro
 	return nil
 }
 
-func (s *Shard) mayDeleteObjectHashTree(uuidBytes []byte, updateTime int64) error {
+func (s *Shard) mayDeleteObjectHashTree(uuidBytes []byte, updateTime int64, deletionTime time.Time) error {
 	s.hashtreeRWMux.RLock()
 	defer s.hashtreeRWMux.RUnlock()
 
@@ -219,10 +219,10 @@ func (s *Shard) mayDeleteObjectHashTree(uuidBytes []byte, updateTime int64) erro
 		return nil
 	}
 
-	return s.deleteObjectHashTree(uuidBytes, updateTime)
+	return s.deleteObjectHashTree(uuidBytes, updateTime, deletionTime)
 }
 
-func (s *Shard) deleteObjectHashTree(uuidBytes []byte, updateTime int64) error {
+func (s *Shard) deleteObjectHashTree(uuidBytes []byte, updateTime int64, deletionTime time.Time) error {
 	if len(uuidBytes) != 16 {
 		return fmt.Errorf("invalid object uuid")
 	}
@@ -238,11 +238,13 @@ func (s *Shard) deleteObjectHashTree(uuidBytes []byte, updateTime int64) error {
 	var objectDigest [16 + 8]byte
 
 	copy(objectDigest[:], uuidBytes)
+
+	// last update is un-registered from the hashtree
 	binary.BigEndian.PutUint64(objectDigest[16:], uint64(updateTime))
+	s.hashtree.AggregateLeafWith(token, objectDigest[:])
 
-	// object deletion is treated as non-existent,
-	// that because deletion time or tombstone may not be available
-
+	// deletion time is registered in the hashtree
+	binary.BigEndian.PutUint64(objectDigest[16:], uint64(deletionTime.UnixMilli()))
 	s.hashtree.AggregateLeafWith(token, objectDigest[:])
 
 	s.objectPropagationRequired()

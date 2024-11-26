@@ -371,14 +371,6 @@ func (idx *Index) OverwriteObjects(ctx context.Context,
 		localObj, err := s.ObjectByIDErrDeleted(ctx, id, nil, additional.Properties{})
 		if err == nil {
 			currUpdateTime = localObj.LastUpdateTimeUnix()
-		} else if errors.Is(err, lsmkv.Deleted) && idx.Config.AsyncReplicationEnabled {
-			// TODO: A temporary limitation of async replication is that delete operations
-			// 		 are not propagated. Because of this, any deleted objects which are still
-			//		 found on any other node in the cluster will be written back to the nodes
-			//		 which successfully processed the delete. If we don't handle this limitation
-			// 		 in this manner, the node which is unaware of the delete will be an in
-			//		 infinite loop attempting to propagate the object.
-			err = nil
 		} else if errors.Is(err, lsmkv.Deleted) {
 			errDeleted, ok := err.(lsmkv.ErrDeleted)
 			if ok {

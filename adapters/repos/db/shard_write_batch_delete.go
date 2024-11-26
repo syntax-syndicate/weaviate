@@ -17,10 +17,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	enterrors "github.com/weaviate/weaviate/entities/errors"
+	"github.com/weaviate/weaviate/entities/storobj"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/pkg/errors"
+	"github.com/weaviate/weaviate/adapters/repos/db/helpers"
 	"github.com/weaviate/weaviate/adapters/repos/db/inverted"
 	"github.com/weaviate/weaviate/entities/additional"
 	"github.com/weaviate/weaviate/entities/filters"
@@ -108,6 +111,63 @@ func (b *deleteObjectsBatcher) deleteObjectOfBatchInLSM(ctx context.Context,
 	}
 
 	return objects.BatchSimpleObject{UUID: uuid, Err: nil}
+}
+
+func (s *Shard) batchDeleteObject(ctx context.Context, id strfmt.UUID, deletionTime time.Time) error {
+	idBytes, err := uuid.MustParse(id.String()).MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	bucket := s.store.Bucket(helpers.ObjectsBucketLSM)
+	existing, err := bucket.Get(idBytes)
+	if err != nil {
+		return errors.Wrap(err, "unexpected error on previous lookup")
+	}
+
+	if existing == nil {
+		// nothing to do
+		return nil
+	}
+
+	// we need the doc ID so we can clean up inverted indices currently
+	// pointing to this object
+	docID, updateTime, err := storobj.DocIDAndTimeFromBinary(existing)
+	if err != nil {
+		return errors.Wrap(err, "get existing doc id from object binary")
+	}
+
+	if deletionTime.IsZero() {
+		err = bucket.Delete(idBytes)
+	} else {
+		err = bucket.DeleteWith(idBytes, deletionTime)
+	}
+	if err != nil {
+		return errors.Wrap(err, "delete object from bucket")
+	}
+
+	err = s.cleanupInvertedIndexOnDelete(existing, docID)
+	if err != nil {
+		return errors.Wrap(err, "delete object from bucket")
+	}
+
+	if s.hasTargetVectors() {
+		for targetVector, queue := range s.queues {
+			if err = queue.Delete(docID); err != nil {
+				return fmt.Errorf("delete from vector index queue of vector %q: %w", targetVector, err)
+			}
+		}
+	} else {
+		if err = s.queue.Delete(docID); err != nil {
+			return errors.Wrap(err, "delete from vector index queue")
+		}
+	}
+
+	if err = s.mayDeleteObjectHashTree(idBytes, updateTime, deletionTime); err != nil {
+		return errors.Wrap(err, "object deletion in hashtree")
+	}
+
+	return nil
 }
 
 func (b *deleteObjectsBatcher) flushWALs(ctx context.Context) {
