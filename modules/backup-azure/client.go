@@ -160,11 +160,10 @@ func (a *azureClient) PutFile(ctx context.Context, backupID, key, srcPath string
 }
 
 func (a *azureClient) PutObject(ctx context.Context, backupID, key string, data []byte) error {
-	var err error
 	objectName := a.makeObjectName(backupID, key)
 
 	reader := bytes.NewReader(data)
-	_, err = a.client.UploadStream(ctx,
+	_, err := a.client.UploadStream(ctx,
 		a.config.Container,
 		objectName,
 		reader,
