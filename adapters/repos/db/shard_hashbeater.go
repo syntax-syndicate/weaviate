@@ -21,6 +21,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/pkg/errors"
 	"github.com/weaviate/weaviate/entities/interval"
+	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/entities/storobj"
 	"github.com/weaviate/weaviate/usecases/objects"
 	"github.com/weaviate/weaviate/usecases/replica"
@@ -341,10 +342,7 @@ func (s *Shard) stepsTowardsShardConsistency(ctx context.Context,
 		localDigestsByUUID := make(map[string]replica.RepairResponse, len(localDigests))
 
 		for _, d := range localDigests {
-			// deleted objects are not propagated
-			if !d.Deleted {
-				localDigestsByUUID[d.ID] = d
-			}
+			localDigestsByUUID[d.ID] = d
 		}
 
 		if len(localDigestsByUUID) == 0 {
@@ -376,12 +374,6 @@ func (s *Shard) stepsTowardsShardConsistency(ctx context.Context,
 				if len(localDigestsByUUID) == 0 {
 					// no more local objects need to be propagated in this iteration
 					break
-				}
-
-				if d.Deleted {
-					// object was deleted in remote host
-					delete(localDigestsByUUID, d.ID)
-					continue
 				}
 
 				remoteObjects++
@@ -425,13 +417,27 @@ func (s *Shard) stepsTowardsShardConsistency(ctx context.Context,
 		mergeObjs := make([]*objects.VObject, 0, len(replicaObjs))
 
 		for _, replicaObj := range replicaObjs {
-			if replicaObj.Deleted {
-				continue
+			var latestObject *models.Object
+			var vector []float32
+			var vectors models.Vectors
+
+			if !replicaObj.Deleted {
+				latestObject = &replicaObj.Object.Object
+				vector = replicaObj.Object.Vector
+				if replicaObj.Object.Vectors != nil {
+					vectors = make(models.Vectors, len(replicaObj.Object.Vectors))
+					for i, v := range replicaObj.Object.Vectors {
+						vectors[i] = v
+					}
+				}
 			}
 
 			obj := &objects.VObject{
-				LatestObject:    &replicaObj.Object.Object,
-				Vector:          replicaObj.Object.Vector,
+				ID:              replicaObj.ID,
+				Deleted:         replicaObj.Deleted,
+				LatestObject:    latestObject,
+				Vector:          vector,
+				Vectors:         vectors,
 				StaleUpdateTime: remoteStaleUpdateTime[replicaObj.ID.String()],
 			}
 
