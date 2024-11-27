@@ -14,6 +14,7 @@ import (
 	"github.com/weaviate/weaviate/usecases/config"
 )
 
+//Test user overrides
 func TestUploadParams(t *testing.T) {
 	defaultBlockSize := int64(40 * 1024 * 1024)
 	defaultEnvironmentValue := int64(11)
