@@ -28,6 +28,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/pkg/errors"
 	"github.com/weaviate/weaviate/entities/backup"
+	"github.com/weaviate/weaviate/usecases/modulecomponents"
 )
 
 type azureClient struct {
@@ -162,25 +163,6 @@ func (a *azureClient) PutObject(ctx context.Context, backupID, key string, data 
 	var err error
 	objectName := a.makeObjectName(backupID, key)
 
-	// Get blocksize and concurrency from the environment
-	blockSize := int64(40 * 1024 * 1024)
-	blockSizeStr := os.Getenv("AZURE_BLOCK_SIZE")
-	if blockSizeStr != "" {
-		blockSize, err = strconv.ParseInt(blockSizeStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("error parsing block size: %w", err)
-		}
-	}
-
-	concurrency := int64(4)
-	concurrencyStr := os.Getenv("AZURE_CONCURRENCY")
-	if concurrencyStr != "" {
-		concurrency, err = strconv.ParseInt(concurrencyStr, 10, 64)
-		if err != nil {
-			return fmt.Errorf("error parsing concurrency: %w", err)
-		}
-	}
-
 	reader := bytes.NewReader(data)
 	_, err = a.client.UploadStream(ctx,
 		a.config.Container,
@@ -189,8 +171,8 @@ func (a *azureClient) PutObject(ctx context.Context, backupID, key string, data 
 		&azblob.UploadStreamOptions{
 			Metadata:    map[string]*string{"backupid": to.Ptr(backupID)},
 			Tags:        map[string]string{"backupid": backupID},
-			BlockSize:   blockSize,
-			Concurrency: int(concurrency),
+			BlockSize:   a.getBlockSize(ctx),
+			Concurrency: a.getConcurrency(ctx),
 		})
 	if err != nil {
 		return backup.NewErrInternal(errors.Wrapf(err, "upload stream for object '%s'", objectName))
@@ -238,6 +220,43 @@ func (a *azureClient) WriteToFile(ctx context.Context, backupID, key, destPath s
 	return nil
 }
 
+func (a *azureClient) getBlockSize(ctx context.Context) int64 {
+	blockSize := int64(40 * 1024 * 1024)
+	blockSizeStr := modulecomponents.GetValueFromContext(ctx, "X-Azure-Block-Size")
+
+
+	if blockSizeStr == "" {
+		blockSizeStr = os.Getenv("AZURE_BLOCK_SIZE")
+	}
+
+	if blockSizeStr != "" {
+		bs, err := strconv.ParseInt(blockSizeStr, 10, 64)
+		if err != nil {
+			return 40 * 1024 * 1024
+		}
+		blockSize = bs
+	}
+	return blockSize
+}
+
+func (a *azureClient) getConcurrency(ctx context.Context) int {
+	concurrency := 1
+	concurrencyStr := modulecomponents.GetValueFromContext(ctx, "X-Azure-Concurrency")
+
+	if concurrencyStr == "" {
+		concurrencyStr = os.Getenv("AZURE_CONCURRENCY")
+	}
+
+	if concurrencyStr != "" {
+		cc, err := strconv.Atoi(concurrencyStr)
+		if err != nil {
+			return 1
+		}
+		concurrency = cc
+	}
+	return concurrency
+}
+
 func (a *azureClient) Write(ctx context.Context, backupID, key string, r io.ReadCloser) (written int64, err error) {
 	path := a.makeObjectName(backupID, key)
 	reader := &reader{src: r}
@@ -246,25 +265,6 @@ func (a *azureClient) Write(ctx context.Context, backupID, key string, r io.Read
 		written = int64(reader.count)
 	}()
 
-	// Get blocksize and concurrency from the environment
-	blockSize := int64(40 * 1024 * 1024)
-	blockSizeStr := os.Getenv("AZURE_BLOCK_SIZE")
-	if blockSizeStr != "" {
-		blockSize, err = strconv.ParseInt(blockSizeStr, 10, 64)
-		if err != nil {
-			return 0, fmt.Errorf("error parsing block size: %w", err)
-		}
-	}
-
-	concurrency := int64(4)
-	concurrencyStr := os.Getenv("AZURE_CONCURRENCY")
-	if concurrencyStr != "" {
-		concurrency, err = strconv.ParseInt(concurrencyStr, 10, 64)
-		if err != nil {
-			return 0, fmt.Errorf("error parsing concurrency: %w", err)
-		}
-	}
-
 	if _, err = a.client.UploadStream(ctx,
 		a.config.Container,
 		path,
@@ -272,8 +272,8 @@ func (a *azureClient) Write(ctx context.Context, backupID, key string, r io.Read
 		&azblob.UploadStreamOptions{
 			Metadata:    map[string]*string{"backupid": to.Ptr(backupID)},
 			Tags:        map[string]string{"backupid": backupID},
-			BlockSize:   blockSize,
-			Concurrency: int(concurrency),
+			BlockSize:   a.getBlockSize(ctx),
+			Concurrency: a.getConcurrency(ctx),
 		}); err != nil {
 		err = fmt.Errorf("upload stream %q: %w", path, err)
 	}
