@@ -26,6 +26,7 @@ import (
 	"github.com/weaviate/weaviate/adapters/repos/db/inverted"
 	"github.com/weaviate/weaviate/adapters/repos/db/lsmkv"
 	"github.com/weaviate/weaviate/adapters/repos/db/vector/common"
+	elsmkv "github.com/weaviate/weaviate/entities/lsmkv"
 	"github.com/weaviate/weaviate/entities/models"
 	"github.com/weaviate/weaviate/entities/storobj"
 )
@@ -214,6 +215,20 @@ func fetchObject(bucket *lsmkv.Bucket, idBytes []byte) (*storobj.Object, error) 
 	return obj, nil
 }
 
+func fetchObjectErrDeleted(bucket *lsmkv.Bucket, idBytes []byte) (*storobj.Object, error) {
+	objBytes, err := bucket.GetErrDeleted(idBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	obj, err := storobj.FromBinary(objBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return obj, nil
+}
+
 func (s *Shard) putObjectLSM(obj *storobj.Object, idBytes []byte,
 ) (status objectInsertStatus, err error) {
 	before := time.Now()
@@ -255,15 +270,30 @@ func (s *Shard) putObjectLSM(obj *storobj.Object, idBytes []byte,
 		var err error
 
 		before = time.Now()
-		prevObj, err = fetchObject(bucket, idBytes)
+
+		var deletionTime time.Time
+
+		prevObj, err = fetchObjectErrDeleted(bucket, idBytes)
 		if err != nil {
-			return err
+			if errors.Is(err, elsmkv.Deleted) {
+				errDeleted, ok := err.(elsmkv.ErrDeleted)
+				if ok {
+					deletionTime = errDeleted.DeletionTime()
+				} // otherwise an unknown deletion time
+			} else if !errors.Is(err, elsmkv.NotFound) {
+				return err
+			}
 		}
 
 		status, err = s.determineInsertStatus(prevObj, obj)
 		if err != nil {
 			return err
 		}
+
+		if prevObj == nil {
+			status.oldUpdateTime = deletionTime.UnixMilli()
+		}
+
 		s.metrics.PutObjectDetermineStatus(before)
 
 		obj.DocID = status.docID
@@ -326,11 +356,7 @@ func (s *Shard) upsertObjectHashTree(object *storobj.Object, uuidBytes []byte, s
 
 	copy(objectDigest[:], uuidBytes)
 
-	if status.docIDChanged {
-		if status.oldUpdateTime < 1 {
-			return fmt.Errorf("invalid object previous update time")
-		}
-
+	if status.oldUpdateTime > 0 {
 		// Given only latest object version is maintained, previous registration is erased
 		binary.BigEndian.PutUint64(objectDigest[16:], uint64(status.oldUpdateTime))
 		s.hashtree.AggregateLeafWith(token, objectDigest[:])
