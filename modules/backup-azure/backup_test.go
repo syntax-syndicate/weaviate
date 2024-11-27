@@ -14,7 +14,7 @@ import (
 	"github.com/weaviate/weaviate/usecases/config"
 )
 
-//Test user overrides
+// Test user overrides
 func TestUploadParams(t *testing.T) {
 	defaultBlockSize := int64(40 * 1024 * 1024)
 	defaultEnvironmentValue := int64(11)
@@ -24,10 +24,10 @@ func TestUploadParams(t *testing.T) {
 	dataDir := t.TempDir()
 
 	azure := New()
-		os.Setenv("BACKUP_AZURE_CONTAINER", "test")
-		os.Setenv("AZURE_STORAGE_ACCOUNT", "test")
-		err := azure.Init(testCtx, newFakeModuleParams(dataDir))
-		require.Nil(t, err)
+	os.Setenv("BACKUP_AZURE_CONTAINER", "test")
+	os.Setenv("AZURE_STORAGE_ACCOUNT", "test")
+	err := azure.Init(testCtx, newFakeModuleParams(dataDir))
+	require.Nil(t, err)
 
 	t.Run("getBlockSize with no inputs", func(t *testing.T) {
 

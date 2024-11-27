@@ -224,7 +224,6 @@ func (a *azureClient) getBlockSize(ctx context.Context) int64 {
 	blockSize := int64(40 * 1024 * 1024)
 	blockSizeStr := modulecomponents.GetValueFromContext(ctx, "X-Azure-Block-Size")
 
-
 	if blockSizeStr == "" {
 		blockSizeStr = os.Getenv("AZURE_BLOCK_SIZE")
 	}
