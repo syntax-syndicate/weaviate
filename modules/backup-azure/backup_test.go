@@ -30,8 +30,6 @@ func TestUploadParams(t *testing.T) {
 	require.Nil(t, err)
 
 	t.Run("getBlockSize with no inputs", func(t *testing.T) {
-
-
 		blockSize := azure.getBlockSize(testCtx)
 		assert.Equal(t, defaultBlockSize, blockSize)
 	})
@@ -41,7 +39,6 @@ func TestUploadParams(t *testing.T) {
 		azure := New()
 		err := azure.Init(testCtx, newFakeModuleParams(dataDir))
 		assert.Nil(t, err)
-
 
 		blockSize := azure.getBlockSize(testCtx)
 		assert.Equal(t, defaultEnvironmentValue, blockSize)
@@ -132,7 +129,6 @@ func TestUploadParams(t *testing.T) {
 		assert.Equal(t, defaultHeaderValue, int64(concurrency))
 	})
 }
-
 
 type fakeModuleParams struct {
 	logger   logrus.FieldLogger
