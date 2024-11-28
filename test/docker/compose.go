@@ -119,6 +119,7 @@ type Compose struct {
 	withRerankerTransformers      bool
 	withOllamaVectorizer          bool
 	withOllamaGenerative          bool
+	withAutoschema                bool
 	weaviateEnvs                  map[string]string
 	removeEnvs                    map[string]struct{}
 }
@@ -472,6 +473,11 @@ func (d *Compose) WithoutWeaviateEnvs(names ...string) *Compose {
 	return d
 }
 
+func (d *Compose) WithAutoschema() *Compose {
+	d.withAutoschema = true
+	return d
+}
+
 func (d *Compose) Start(ctx context.Context) (*DockerCompose, error) {
 	d.weaviateEnvs["DISABLE_TELEMETRY"] = "true"
 	network, err := tescontainersnetwork.New(
@@ -765,6 +771,10 @@ func (d *Compose) startCluster(ctx context.Context, size int, settings map[strin
 		if len(d.weaviateRbacViewers) > 0 {
 			settings["AUTHORIZATION_VIEWER_USERS"] = strings.Join(d.weaviateRbacViewers, ",")
 		}
+	}
+
+	if d.withAutoschema {
+		settings["AUTOSCHEMA_ENABLED"] = "true"
 	}
 
 	settings["RAFT_PORT"] = "8300"
